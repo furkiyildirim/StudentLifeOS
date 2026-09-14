@@ -46,31 +46,15 @@ Student Life OS, universite ogrencilerinin akademik ve gunluk planlarini yerel v
 
 Uygulamanin ekran goruntuleri `images/` klasorunden:
 
-![Dashboard](images/dashboard.png)
+![Kontrol Paneli](images/dashboard.png)
 
-![Takvim](images/calendar.png)
+![Yapilacaklar](images/tasks.png)
 
-![Ders Programi](images/timetable.png)
+![Akilli Takvim](images/calendar.png)
+
+![Dersler ve Notlar](images/timetable.png)
 
 ![Ders Programi Detayi](images/timetable2.png)
-
-![AI Asistani](images/ai-assistant.png)
-
-![Gorevler](images/tasks.png)
-
-![Muzik](images/music.png)
-
-![Muzik Detayi](images/music2.png)
-
-![Projeler](images/procject.png)
-
-![Universite](images/uni.png)
-
-![Universite Detayi](images/uni2.png)
-
-![Ayarlar](images/settings.png)
-
-![Ayarlar Detayi](images/settings2.png)
 
 ![Materyal Kasasi](images/vault.png)
 
@@ -79,6 +63,26 @@ Uygulamanin ekran goruntuleri `images/` klasorunden:
 ![Materyal Kasasi Notlar](images/vault3.png)
 
 ![Materyal Kasasi Dosyalar](images/vault4.png)
+
+![Spor ve Aliskanlik](images/fitness.png)
+
+![Muzik ve Odak](images/music.png)
+
+![Muzik Detayi](images/music2.png)
+
+![Muzik Ek Detayi](images/music3.png)
+
+![Universite](images/uni.png)
+
+![Universite Detayi](images/uni2.png)
+
+![Projeler](images/procject.png)
+
+![Ayarlar](images/settings.png)
+
+![Ayarlar Detayi](images/settings2.png)
+
+![AI Asistani](images/ai-assistant.png)
 
 Yeni bir ekran goruntusu eklemek icin dosyayi `images/` klasorune koyup README'ye su formatta bir satir ekleyin:
 
@@ -99,8 +103,8 @@ Yeni bir ekran goruntusu eklemek icin dosyayi `images/` klasorune koyup README'y
 ### 1. Depoyu klonlayin
 
 ```powershell
-git clone https://github.com/furkiyildirim/StudentLifeOSV5.git
-Set-Location StudentLifeOSV5
+git clone https://github.com/furkiyildirim/StudentLifeOS.git
+Set-Location StudentLifeOS
 ```
 
 ### 2. Sanal ortami olusturun
