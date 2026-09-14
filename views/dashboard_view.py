@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime, date, timedelta
+from urllib.parse import quote
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QGridLayout, QCheckBox, QScrollArea, QPushButton,
@@ -22,11 +23,6 @@ class WeatherWorker(QThread):
         self.db = db
 
     def run(self):
-        from core.network import check_internet_connection
-        if not check_internet_connection():
-            self.result_ready.emit("🔌 Offline (İnternet Yok)")
-            return
-
         try:
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
@@ -41,17 +37,26 @@ class WeatherWorker(QThread):
                 selected_city = m_loc[0].strip() if m_loc and m_loc[0] != "1" else ""
 
             if selected_city and selected_city != "Otomatik Konum":
-                url = f"https://wttr.in/{selected_city}?format=%l:+%t+%c"
+                url = f"https://wttr.in/{quote(selected_city)}?format=%l:+%t+%c"
             else:
                 url = "https://wttr.in/?format=%l:+%t+%c"
 
-            resp = requests.get(url, timeout=5)
+            resp = requests.get(
+                url,
+                headers={"User-Agent": "StudentLifeOS/1.0"},
+                timeout=(5, 15),
+            )
             if resp.status_code == 200:
-                self.result_ready.emit(f"📍 {resp.text.strip()}")
+                weather_text = resp.text.strip()
+                self.result_ready.emit(
+                    f"📍 {weather_text}" if weather_text else "📍 Hava durumu alınamadı"
+                )
             else:
                 self.result_ready.emit("📍 Hava durumu alınamadı")
-        except Exception:
+        except requests.RequestException:
             self.result_ready.emit("🔌 Offline / Bağlantı Hatası")
+        except Exception:
+            self.result_ready.emit("📍 Hava durumu alınamadı")
 
 # =========================================================================
 # 1. YEREL GRAFİK BİLEŞENLERİ (QPainter Tabanlı Donut ve Bar Chart)
