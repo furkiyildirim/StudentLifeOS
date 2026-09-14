@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QDialog, QLineEdit, QTextEdit, QMessageBox
 )
 from PySide6.QtCore import Qt, QRectF, QTimer, QThread, Signal
+from PySide6.QtNetwork import QNetworkInformation
 from PySide6.QtGui import QCursor, QPainter, QColor, QBrush, QPen, QFont
 from core.events import bus
 from core.sound import play_action_sound
@@ -367,6 +368,8 @@ class DashboardView(QWidget):
         self.weather_connection_timer.timeout.connect(self.check_weather_connection)
         self.weather_connection_timer.start(15000)
         self.weather_online = None
+        self.network_information = None
+        self.setup_network_monitor()
 
         self.fetch_weather()
 
@@ -389,6 +392,29 @@ class DashboardView(QWidget):
         self.weather_worker.result_ready.connect(self.set_weather_text)
         self.weather_worker.finished.connect(self.weather_worker.deleteLater)
         self.weather_worker.start()
+
+    def setup_network_monitor(self):
+        try:
+            QNetworkInformation.loadDefaultBackend()
+            self.network_information = QNetworkInformation.instance()
+            if self.network_information:
+                self.network_information.reachabilityChanged.connect(
+                    self.handle_network_reachability
+                )
+        except (ImportError, RuntimeError):
+            self.network_information = None
+
+    def handle_network_reachability(self, reachability):
+        if reachability == QNetworkInformation.Reachability.Disconnected:
+            self.weather_online = False
+            self.set_weather_text("🔌 Offline")
+        elif reachability in (
+            QNetworkInformation.Reachability.Site,
+            QNetworkInformation.Reachability.Online,
+        ):
+            self.weather_online = True
+            self.set_weather_text("Hava durumu güncelleniyor...")
+            self.fetch_weather()
 
     def check_weather_connection(self):
         from core.network import check_internet_connection
