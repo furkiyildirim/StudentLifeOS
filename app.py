@@ -41,6 +41,25 @@ SOUNDS_DIR = "resources/notification_sounds" if os.path.exists("resources/notifi
 if not os.path.exists(SOUNDS_DIR):
     os.makedirs(SOUNDS_DIR)
 
+def remove_autostart_entry():
+    startup_dir = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup")
+    legacy_file = os.path.join(startup_dir, "StudentLifeOS.bat")
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_SET_VALUE) as key:
+            try:
+                winreg.DeleteValue(key, "StudentLifeOS")
+            except FileNotFoundError:
+                pass
+    except OSError:
+        pass
+
+    try:
+        if os.path.exists(legacy_file):
+            os.remove(legacy_file)
+    except OSError:
+        pass
+
 GLOBAL_QSS = """
 QMainWindow { background-color: #0c0a09; }
 QWidget { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5; background: transparent; }
@@ -474,38 +493,6 @@ class SettingsView(QWidget):
         self.toggle_sub_notifs(is_global_notif)
         lay.addWidget(notif_card)
 
-        sys_card = QFrame()
-        sys_card.setObjectName("Card")
-        c_lay = QVBoxLayout(sys_card)
-
-        lbl_sys_title = QLabel("💻 İşletim Sistemi Entegrasyonu")
-        lbl_sys_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;")
-        c_lay.addWidget(lbl_sys_title)
-
-        self.btn_autostart = QPushButton()
-        self.btn_autostart.setCheckable(True)
-        self.btn_autostart.setCursor(QCursor(Qt.PointingHandCursor))
-        self.btn_autostart.setFixedHeight(45)
-        self.btn_autostart.setStyleSheet("""
-            QPushButton { background-color: #27272a; color: #a1a1aa; border: 2px solid #3f3f46; border-radius: 8px; font-weight: bold; font-size: 14px; text-align: left; padding-left: 16px; }
-            QPushButton:hover { background-color: #3f3f46; }
-            QPushButton:checked { background-color: #064e3b; color: #10b981; border: 2px solid #059669; }
-        """)
-
-        is_enabled = self.check_autostart()
-        self.btn_autostart.setChecked(is_enabled)
-        self.update_autostart_btn_text(is_enabled)
-        self.btn_autostart.toggled.connect(self.toggle_autostart)
-
-        desc = QLabel("Bilgisayar açılır açılmaz uygulama arka planda sessizce başlar.")
-        desc.setStyleSheet("color: #a1a1aa; font-size: 11px; margin-top: 4px;")
-
-        c_lay.addWidget(self.btn_autostart)
-        c_lay.addWidget(desc)
-        lay.addWidget(sys_card)
-
-        
-
         # --- HAVA DURUMU AYAR KARTI ---
         weather_card = QFrame()
         weather_card.setObjectName("Card")
@@ -704,39 +691,6 @@ class SettingsView(QWidget):
         self.cb_plan_time.setEnabled(enabled)
         for cb in self.sound_combos:
             cb.setEnabled(enabled)
-
-    def update_autostart_btn_text(self, checked: bool):
-        if checked: self.btn_autostart.setText("🚀 Açılışta Otomatik Başlat: AKTİF")
-        else: self.btn_autostart.setText("⏸️ Açılışta Otomatik Başlat: KAPALI")
-
-    def get_startup_file_path(self):
-        import os
-        startup_dir = os.path.join(os.environ["APPDATA"], r"Microsoft\Windows\Start Menu\Programs\Startup")
-        return os.path.join(startup_dir, "StudentLifeOS.bat")
-
-    def check_autostart(self) -> bool:
-        import os
-        return os.path.exists(self.get_startup_file_path())
-
-    def toggle_autostart(self, checked: bool):
-        import os
-        import sys
-        self.update_autostart_btn_text(checked)
-        startup_file = self.get_startup_file_path()
-        
-        if checked:
-            exe_path = os.path.abspath(sys.argv[0])
-            try:
-                with open(startup_file, "w", encoding="utf-8") as f:
-                    f.write(f'@echo off\nstart "" "{exe_path}" --hidden\n')
-            except Exception:
-                pass
-        else:
-            if os.path.exists(startup_file):
-                try:
-                    os.remove(startup_file)
-                except Exception:
-                    pass
 
     def perform_factory_reset(self):
         reply = QMessageBox.warning(
@@ -1418,6 +1372,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
+    remove_autostart_entry()
     
     if os.name == 'nt':
         try:

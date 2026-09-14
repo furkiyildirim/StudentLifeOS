@@ -1,18 +1,46 @@
 # Student Life OS
 
-Student Life OS, universite ogrencilerinin ders programini, gorevlerini, projelerini, notlarini, spor planini ve gunluk yasamini tek bir masaustu uygulamasinda yonetmesini saglayan Python ve PySide6 tabanli bir productivity uygulamasidir.
+> Ogrenci hayatinin ders, gorev, proje, materyal, spor ve odak calismalarini tek bir Windows masaustu uygulamasinda birlestiren productivity platformu.
 
-## Ozellikler
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D4)](https://www.microsoft.com/windows)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](https://www.python.org/)
+[![UI](https://img.shields.io/badge/UI-PySide6-41CD52)](https://doc.qt.io/qtforpython/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+Student Life OS, universite ogrencilerinin akademik ve gunluk planlarini yerel veritabaniyla yonetmesini saglayan Python ve PySide6 tabanli bir masaustu uygulamasidir. Veriler varsayilan olarak bilgisayarda tutulur; bulut hesabina bagimli bir kullanim gerektirmez.
+
+## Icerik
+
+- [Neler Sunar?](#neler-sunar)
+- [Gereksinimler](#gereksinimler)
+- [Kurulum](#kurulum)
+- [Yapilandirma](#yapilandirma)
+- [Yerel AI Modeli](#yerel-ai-modeli)
+- [Gelismis Kullanim](#gelismis-kullanim)
+- [Veri ve Gizlilik](#veri-ve-gizlilik)
+- [Sorun Giderme](#sorun-giderme)
+- [Lisans](#lisans)
+
+## Neler Sunar?
+
+### Akademik planlama
 
 - Dersler, haftalik ders programi, sinavlar ve akademik takvim
 - To-do listesi, projeler ve gunluk planlama
+- Sistem tepsisi bildirimleri ve zamanlanmis hatirlaticilar
+
+### Kisisel takip
+
+- Spor, antrenman ve aliskanlik takibi
+- YouTube Music, yerel muzik ve Pomodoro odak sayaci
+- Hava durumu ve gunluk kontrol paneli
+
+### Materyal ve AI
+
 - HTML destekli notlar ve materyal arsivi
 - DOCX, PPTX, XLSX ve CSV dosyalariyla calisma
-- Spor ve antrenman takibi
-- YouTube Music, yerel muzik ve Pomodoro odak sayaci
-- Sistem tepsisi, bildirim sesleri ve zamanlanmis uyarilar
 - Gemini, OpenAI, Anthropic veya yerel GGUF model kullanan AI asistani
-- SQLite tabanli yerel veritabani
+- SQLite tabanli yerel veri saklama
 
 ## Uygulama Goruntuleri
 
@@ -63,11 +91,21 @@ Yeni bir ekran goruntusu eklemek icin dosyayi `images/` klasorune koyup README'y
 - Windows 10 veya daha yeni bir Windows surumu
 - Python 3.11 veya 3.12 onerilir
 - Python 3.14 ile temel paketler calisabilir; `llama-cpp-python` icin CPU wheel kullanilmalidir
+- Internet baglantisi: AI API'leri, YouTube Music ve guncel hava durumu icin gereklidir
 - Yerel model kullanilacaksa `resources/models/local_model.gguf` dosyasi
 
 ## Kurulum
 
-PowerShell ile proje klasorunde su komutlari calistirin:
+### 1. Depoyu klonlayin
+
+```powershell
+git clone https://github.com/furkiyildirim/StudentLifeOSV5.git
+Set-Location StudentLifeOSV5
+```
+
+### 2. Sanal ortami olusturun
+
+PowerShell ile proje klasorunda su komutlari calistirin:
 
 ```powershell
 python -m venv .venv
@@ -90,13 +128,21 @@ python app.py
 
 Uygulama ilk calistirmada proje klasorunde `student_life.db` dosyasini olusturur. Kullanici dosyalari ve profil verileri `vault_storage/` altinda tutulur.
 
+## Yapilandirma
+
+Uygulama icindeki `Ayarlar` ekranindan su tercihleri yonetilebilir:
+
+- AI saglayici ve API anahtarlari
+- Bildirimler, bildirim zamanlari ve sesler
+- Hava durumu gorunumu ve konum
+
+API anahtarlarini kaynak koduna, `README.md` dosyasina veya `requirements.txt` dosyasina yazmayin. Anahtarlar yerel SQLite ayarlar tablosunda tutulur.
+
 ## AI API Anahtarlari
 
 API anahtarlari uygulama icindeki AI asistani ayarlarindan girilebilir. Kullanilan saglayiciya gore Gemini, OpenAI veya Anthropic anahtari gerekir. Yerel model secenegi icin API anahtari gerekmez; GGUF dosyasi `resources/models/local_model.gguf` konumunda bulunmalidir.
 
-API anahtarlarini kaynak koduna veya `requirements.txt` dosyasina yazmayin.
-
-## Yerel Modeli Indirme
+## Yerel AI Modeli
 
 Yerel AI asistani icin Qwen2.5 Coder 3B Instruct modelinin GGUF formatindaki `Q4_K_M` quantization dosyasi kullanilir. Model dosyasi yaklasik 1.8 GB oldugu icin GitHub deposuna dahil edilmez.
 
@@ -151,6 +197,35 @@ dist\StudentLifeOS\StudentLifeOS.exe
 - EXE, yerel model olmadan da acilabilir; ancak `Yerel` AI secenegi icin model dosyasini `dist/StudentLifeOS/resources/models/local_model.gguf` konumuna ayri olarak kopyalamaniz gerekir.
 - Uygulama calisirken olusan `student_life.db` ve `vault_storage/` kullanici verileridir; yedeklemek icin bu iki yolu kopyalayin.
 - Tek dosyali paket gerekiyorsa `--onedir` yerine `--onefile` kullanilabilir. Ancak baslangic daha yavas olur ve buyuk model dosyasini paketlemek pratik olmayabilir.
+
+## Gelismis Kullanim
+
+### Proje yapisi
+
+```text
+app.py                 Ana PySide6 uygulamasi
+core/                  Veritabani, AI, ag, ses ve olay modulleri
+views/                 Uygulama ekranlari
+widgets/               Ortak arayuz bilesenleri
+resources/             Tema, ikon, ses ve model dosyalari
+schema.sql             Veritabani semasi
+```
+
+### Gelistirme kontrolu
+
+Degisikliklerden sonra en azindan Python syntax kontrolunu calistirin:
+
+```powershell
+python -m py_compile app.py
+```
+
+## Veri ve Gizlilik
+
+- Uygulama verileri yerel `student_life.db` SQLite dosyasinda tutulur.
+- Web profilleri, muzik oturumlari ve uygulama onbellekleri `vault_storage/` altinda tutulur.
+- API anahtarlari Git'e eklenmemelidir.
+- Yedek almak icin `student_life.db` ve `vault_storage/` klasorlerini birlikte kopyalayin.
+- `resources/models/local_model.gguf` buyuk oldugu icin GitHub reposuna dahil edilmez.
 
 ## Sorun Giderme
 
