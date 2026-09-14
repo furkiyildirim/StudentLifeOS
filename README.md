@@ -14,6 +14,26 @@ Student Life OS, universite ogrencilerinin ders programini, gorevlerini, projele
 - Gemini, OpenAI, Anthropic veya yerel GGUF model kullanan AI asistani
 - SQLite tabanli yerel veritabani
 
+## Uygulama Goruntuleri
+
+Ekran goruntulerini `images/` klasorune ekleyin. Asagidaki dosya adlarini kullanirsaniz gorseller README icinde otomatik olarak gorunur:
+
+![Dashboard](images/dashboard.png)
+
+![Ders Programi](images/timetable.png)
+
+![Takvim](images/calendar.png)
+
+![AI Asistani](images/ai-assistant.png)
+
+![Gorevler](images/tasks.png)
+
+Yeni bir ekran goruntusu eklemek icin dosyayi `images/` klasorune koyup README'ye su formatta bir satir ekleyin:
+
+```markdown
+![Gorsel aciklamasi](images/dosya-adi.png)
+```
+
 ## Gereksinimler
 
 - Windows 10 veya daha yeni bir Windows surumu
