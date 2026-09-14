@@ -48,6 +48,8 @@ Uygulamanin ekran goruntuleri `images/` klasorunden:
 
 ![Kontrol Paneli](images/dashboard.png)
 
+![Kontrol Paneli Detayi](images/dashboard2.png)
+
 ![Yapilacaklar](images/tasks.png)
 
 ![Akilli Takvim](images/calendar.png)

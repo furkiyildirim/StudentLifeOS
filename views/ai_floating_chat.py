@@ -2,11 +2,11 @@ import os
 import multiprocessing
 import google.generativeai as genai
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QTextEdit, QComboBox,
+    QApplication, QVBoxLayout, QHBoxLayout, QTextEdit, QComboBox,
     QLineEdit, QPushButton, QLabel, QFrame, QInputDialog, QMessageBox
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
-from PySide6.QtGui import QCursor, QColor
+from PySide6.QtGui import QCursor, QColor, QTextCursor
 
 from core.events import bus
 
@@ -66,6 +66,8 @@ class AIWorker(QThread):
                         verbose=False
                     )
                 except Exception:
+                    if not self.is_running:
+                        return
                     self.local_llm = Llama(
                         model_path=model_path, 
                         n_ctx=4096, 
@@ -73,6 +75,10 @@ class AIWorker(QThread):
                         n_gpu_layers=0, 
                         verbose=False
                     )
+
+                if not self.is_running:
+                    self.local_llm = None
+                    return
 
                 self.chat_history = [{"role": "system", "content": system_prompt}]
                 self.system_ready.emit()
@@ -98,6 +104,8 @@ class AIWorker(QThread):
         while self.is_running:
             if self.message_queue:
                 msg = self.message_queue.pop(0)
+                if not self.is_running:
+                    break
                 try:
                     if "Gemini" in self.model_choice:
                         response = self.chat_session.send_message(msg)
@@ -159,6 +167,7 @@ class AIWorker(QThread):
 
     def stop(self):
         self.is_running = False
+        self.message_queue.clear()
 
 class AIChatWindow(QFrame):
     def __init__(self, parent=None, db=None):
@@ -166,6 +175,8 @@ class AIChatWindow(QFrame):
         self.main_window = parent
         self.db = db
         self.worker = None
+        self.stopping_workers = []
+        self.generation_cancelled = False
         
         self.setFixedSize(450, 600)
         self.setObjectName("ChatSidebar")
@@ -176,6 +187,8 @@ class AIChatWindow(QFrame):
         
         self.hide()
         self.init_ui()
+        if QApplication.instance():
+            QApplication.instance().aboutToQuit.connect(self.shutdown_workers)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -243,9 +256,21 @@ class AIChatWindow(QFrame):
             QPushButton:hover { background-color: #2563eb; }
         """)
         self.btn_send.clicked.connect(self.send_message)
+
+        self.btn_stop = QPushButton("■")
+        self.btn_stop.setFixedSize(44, 44)
+        self.btn_stop.setToolTip("Yanıt üretimini durdur")
+        self.btn_stop.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_stop.setStyleSheet("""
+            QPushButton { background-color: #9f1239; color: white; font-weight: bold; border-radius: 22px; font-size: 14px; border: none; }
+            QPushButton:hover { background-color: #be123c; }
+        """)
+        self.btn_stop.clicked.connect(self.stop_generation)
+        self.btn_stop.hide()
         
         input_lay.addWidget(self.input_field)
         input_lay.addWidget(self.btn_send)
+        input_lay.addWidget(self.btn_stop)
         layout.addLayout(input_lay)
 
     def showEvent(self, event):
@@ -255,18 +280,33 @@ class AIChatWindow(QFrame):
 
     def hideEvent(self, event):
         super().hideEvent(event)
+        self.typing_timer.stop()
+        self.lbl_typing.hide()
+        self.input_field.setEnabled(False)
+        self.btn_send.setEnabled(False)
+        self.btn_stop.hide()
         if self.worker:
             worker = self.worker
             self.worker = None
             self.stop_worker(worker)
-            self.chat_display.append("<br><span style='color:#a1a1aa;'>Sistem: Asistan uyku moduna geçti (RAM temizlendi).</span>")
 
     def closeEvent(self, event):
-        if self.worker:
-            worker = self.worker
-            self.worker = None
-            self.stop_worker(worker)
+        self.shutdown_workers()
         event.accept()
+
+    def shutdown_workers(self):
+        workers = list(self.stopping_workers)
+        if self.worker:
+            workers.append(self.worker)
+            self.worker = None
+
+        for worker in workers:
+            self.stop_worker(worker)
+
+        for worker in list(self.stopping_workers):
+            if worker.isRunning():
+                worker.wait()
+            self.finish_stopping_worker(worker)
 
     def stop_worker(self, worker):
         try:
@@ -278,16 +318,51 @@ class AIChatWindow(QFrame):
 
         worker.stop()
         if worker.isRunning():
-            worker.wait(3000)
+            if worker not in self.stopping_workers:
+                self.stopping_workers.append(worker)
+                worker.finished.connect(lambda: self.finish_stopping_worker(worker))
+            return
 
-        if worker.isRunning():
-            worker.finished.connect(worker.deleteLater)
-        else:
-            worker.deleteLater()
+        worker.deleteLater()
+
+    def finish_stopping_worker(self, worker):
+        if worker in self.stopping_workers:
+            self.stopping_workers.remove(worker)
+        worker.deleteLater()
+        if self.isVisible() and self.generation_cancelled and not self.stopping_workers:
+            self.generation_cancelled = False
+            self.input_field.setEnabled(True)
+            self.btn_send.setEnabled(True)
+            self.chat_display.append("<br><span style='color:#a1a1aa;'>Sistem: Yanıt üretimi durduruldu.</span>")
+            self.scroll_to_bottom()
 
     def update_typing(self):
         self.typing_dots = (self.typing_dots + 1) % 4
         self.lbl_typing.setText(f"{self.model_combo.currentText().split(' ')[0]} yazıyor{'.' * self.typing_dots}")
+
+    def show_local_model_missing(self):
+        self.chat_display.clear()
+        self.chat_display.append(
+            "<span style='color:#f87171; font-size:14px;'><b>AI model yüklü değil.</b></span><br>"
+            "<span style='color:#a1a1aa;'>Yerel asistanı kullanmak için "
+            "README.md dosyasındaki adımları izleyin:</span><br><br>"
+            "<span style='color:#e4e4e7;'><b>PowerShell ile:</b></span><br>"
+            "<pre style='color:#a1a1aa;'>"
+            "New-Item -ItemType Directory -Force resources\\models | Out-Null\n"
+            "Invoke-WebRequest `\n"
+            "  -Uri \"https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf?download=true\" `\n"
+            "  -OutFile \"resources\\models\\local_model.gguf\"</pre>"
+            "<span style='color:#a1a1aa;'>Dosya adı tam olarak "
+            "<b>local_model.gguf</b> olmalı ve şu konumda bulunmalı:</span><br>"
+            "<span style='color:#38bdf8;'>resources/models/local_model.gguf</span><br><br>"
+            "<span style='color:#e4e4e7;'><b>Kontrol etmek için:</b></span><br>"
+            "<pre style='color:#a1a1aa;'>Get-Item resources\\models\\local_model.gguf | Select-Object FullName,Length</pre>"
+            "<span style='color:#a1a1aa;'>Alternatif olarak Qwen2.5-Coder-3B-Instruct-GGUF modelini tarayıcıdan indirip "
+            "resources/models/ klasörüne <b>local_model.gguf</b> adı ile koyabilirsiniz. "
+            "Ardından uygulamayı yeniden başlatın.</span>"
+        )
+        self.input_field.setEnabled(False)
+        self.btn_send.setEnabled(False)
 
     def reset_ai(self, val=None):
         if self.worker:
@@ -302,6 +377,11 @@ class AIChatWindow(QFrame):
         self.chat_display.append(f"<br><span style='color:#f59e0b;'>Sistem: {selected_model} modeline geçiliyor...</span>")
         
         if "Yerel" in selected_model and isinstance(val, str):
+            model_path = os.path.join("resources", "models", "local_model.gguf")
+            if not os.path.exists(model_path):
+                self.show_local_model_missing()
+                return
+
             QMessageBox.warning(
                 self, 
                 "Otomatik Donanım Algılama ⚙️", 
@@ -317,6 +397,11 @@ class AIChatWindow(QFrame):
         key_name = "gemini_api_key"
         
         if "Yerel" in selected_model:
+            model_path = os.path.join("resources", "models", "local_model.gguf")
+            if not os.path.exists(model_path):
+                self.show_local_model_missing()
+                return False
+
             self.worker = AIWorker(self.db, selected_model)
             self.worker.finished.connect(self.worker.deleteLater)
             self.worker.response_ready.connect(self.on_response)
@@ -369,10 +454,29 @@ class AIChatWindow(QFrame):
         self.chat_display.append(f"<span style='color:#3b82f6;'>Sistem: {self.model_combo.currentText()} aktif. Size nasıl yardımcı olabilirim?</span><br>")
         self.input_field.setEnabled(True)
         self.btn_send.setEnabled(True)
+        self.btn_stop.hide()
+
+    def stop_generation(self):
+        self.generation_cancelled = True
+        self.typing_timer.stop()
+        self.lbl_typing.hide()
+        self.btn_stop.hide()
+
+        if self.worker:
+            worker = self.worker
+            self.worker = None
+            self.stop_worker(worker)
+
+        self.input_field.setEnabled(False)
+        self.btn_send.setEnabled(False)
+        self.chat_display.append("<br><span style='color:#f59e0b;'><b>Sistem:</b> Yanıt üretimi durduruluyor...</span>")
+        self.scroll_to_bottom()
 
     def send_message(self):
         text = self.input_field.text().strip()
         if not text: return
+
+        self.generation_cancelled = False
 
         if "Yerel" not in self.model_combo.currentText():
             from core.network import check_internet_connection
@@ -391,6 +495,7 @@ class AIChatWindow(QFrame):
         self.input_field.clear()
         self.input_field.setEnabled(False)
         self.btn_send.setEnabled(False)
+        self.btn_stop.show()
         
         self.typing_dots = 0
         self.lbl_typing.setText(f"{self.model_combo.currentText().split(' ')[0]} yazıyor")
@@ -400,12 +505,20 @@ class AIChatWindow(QFrame):
         self.worker.queue_message(text)
 
     def on_response(self, reply_text):
+        if self.generation_cancelled:
+            return
+
         self.typing_timer.stop()
         self.lbl_typing.hide()
+        self.btn_stop.hide()
         
-        formatted = str(reply_text or "").replace('\n', '<br>')
         model_name = self.model_combo.currentText().split(' ')[0]
-        self.chat_display.append(f"<b style='color:#10b981;'>{model_name}:</b> {formatted}<br><br>")
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        cursor.insertHtml(f"<br><b style='color:#10b981;'>{model_name}:</b> ")
+        cursor.insertMarkdown(str(reply_text or "").strip())
+        cursor.insertHtml("<br><br>")
+        self.chat_display.setTextCursor(cursor)
         
         try:
             if self.main_window:
@@ -434,8 +547,12 @@ class AIChatWindow(QFrame):
         self.scroll_to_bottom()
 
     def on_error(self, error_msg):
+        if self.generation_cancelled:
+            return
+
         self.typing_timer.stop()
         self.lbl_typing.hide()
+        self.btn_stop.hide()
         
         self.chat_display.append(f"<br><span style='color:#ef4444;'><b>Hata:</b> {error_msg}</span>")
         self.input_field.setEnabled(True)

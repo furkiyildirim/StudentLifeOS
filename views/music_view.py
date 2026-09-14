@@ -4,6 +4,7 @@ import shutil
 import random
 import wave
 import contextlib
+from datetime import date
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
@@ -15,6 +16,7 @@ from PySide6.QtGui import QCursor, QPainter, QColor, QPen, QFont, QIcon, QPixmap
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage, QWebEngineSettings
+from core.events import bus
 
 # =========================================================================
 # ÇENTİKLİ VE TUTAMAÇLI İNTERAKTİF SAYAÇ
@@ -146,6 +148,8 @@ class MusicView(QWidget):
         self.main_window = main_window
         
         self.current_theme_color = "#f43f5e"
+        self.is_study_mode = True
+        self.study_refresh_ticks = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.timer_tick)
 
@@ -986,18 +990,21 @@ class MusicView(QWidget):
     def set_preset(self, minutes: int, color_hex: str):
         self.timer.stop()
         self.current_theme_color = color_hex
+        self.is_study_mode = color_hex == "#f43f5e"
         self.glow_effect.setColor(QColor(color_hex))
         self.circular_timer.update_state(minutes * 60, minutes * 60, False, color_hex)
 
     def set_custom_time_from_dial(self, minutes: int):
         self.timer.stop()
         self.current_theme_color = "#a855f7" 
+        self.is_study_mode = True
         self.glow_effect.setColor(QColor(self.current_theme_color))
         self.circular_timer.update_state(minutes * 60, minutes * 60, False, self.current_theme_color)
 
     def reset_timer(self):
         self.timer.stop()
         self.circular_timer.update_state(self.circular_timer.total_time, self.circular_timer.total_time, False)
+        bus.study_time_changed.emit()
 
     def toggle_timer(self):
         if self.circular_timer.time_left <= 0: return
@@ -1005,6 +1012,7 @@ class MusicView(QWidget):
         if self.circular_timer.is_running:
             self.timer.stop()
             self.circular_timer.update_state(self.circular_timer.time_left, self.circular_timer.total_time, False)
+            bus.study_time_changed.emit()
         else:
             self.timer.start(1000)
             self.circular_timer.update_state(self.circular_timer.time_left, self.circular_timer.total_time, True)
@@ -1015,9 +1023,11 @@ class MusicView(QWidget):
         if time_left > 0:
             time_left -= 1
             self.circular_timer.update_state(time_left, self.circular_timer.total_time, True)
+            self.record_study_second()
         else:
             self.timer.stop()
             self.circular_timer.update_state(0, self.circular_timer.total_time, False)
+            bus.study_time_changed.emit()
             
             if self.main_window and hasattr(self.main_window, 'send_tray_notification'):
                 self.main_window.send_tray_notification(
@@ -1026,3 +1036,27 @@ class MusicView(QWidget):
                     color="#f43f5e",
                     sound_key="sound_pomodoro"
                 )
+
+    def record_study_second(self):
+        if not self.is_study_mode or not self.main_window or not hasattr(self.main_window, "db"):
+            return
+
+        try:
+            with self.main_window.db.get_connection() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO study_time_logs (log_date, seconds, updated_at)
+                    VALUES (?, 1, CURRENT_TIMESTAMP)
+                    ON CONFLICT(log_date) DO UPDATE SET
+                        seconds = seconds + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (date.today().isoformat(),),
+                )
+                conn.commit()
+            self.study_refresh_ticks += 1
+            if self.study_refresh_ticks >= 15:
+                self.study_refresh_ticks = 0
+                bus.study_time_changed.emit()
+        except Exception:
+            pass

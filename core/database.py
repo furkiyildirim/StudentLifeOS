@@ -121,5 +121,13 @@ class DatabaseManager:
                 is_completed BOOLEAN DEFAULT 0
             );
             """)
+
+            cur.execute("""
+            CREATE TABLE IF NOT EXISTS study_time_logs (
+                log_date DATE PRIMARY KEY,
+                seconds INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """)
             
             conn.commit()

@@ -3,7 +3,7 @@ from datetime import datetime, date, timedelta
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QGridLayout, QCheckBox, QScrollArea, QPushButton,
-    QProgressBar, QDialog, QLineEdit, QTextEdit, QMessageBox
+    QProgressBar, QDialog, QLineEdit, QTextEdit, QMessageBox, QToolTip, QComboBox
 )
 from PySide6.QtCore import Qt, QRectF, QTimer, QThread, Signal
 from PySide6.QtNetwork import QNetworkInformation
@@ -171,6 +171,81 @@ class HabitWeeklyBarChart(QWidget):
             painter.drawText(QRectF(x - 5, h - bottom_margin + 5, bar_width + 10, 16), Qt.AlignCenter, day_lbl)
 
 
+class StudyTimeBarChart(QWidget):
+    def __init__(self, data=None):
+        super().__init__()
+        self.data = data or []
+        self.setFixedHeight(180)
+        self.setMouseTracking(True)
+
+    def set_data(self, data):
+        self.data = data
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        if not self.data:
+            return
+
+        width = self.width()
+        height = self.height()
+        left = 12
+        right = 12
+        top = 18
+        bottom = 34
+        chart_height = height - top - bottom
+        bar_gap = 10
+        bar_width = max(18, int((width - left - right - bar_gap * (len(self.data) - 1)) / len(self.data)))
+        max_seconds = max([seconds for _, seconds in self.data] + [3600])
+
+        for index, (label, seconds) in enumerate(self.data):
+            x = left + index * (bar_width + bar_gap)
+            bar_height = max(4, int((seconds / max_seconds) * chart_height)) if seconds else 4
+            y = height - bottom - bar_height
+            color = QColor("#38bdf8") if seconds else QColor("#27272a")
+
+            painter.setBrush(QBrush(color))
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(x, y, bar_width, bar_height, 5, 5)
+
+            if seconds:
+                painter.setPen(QPen(QColor("#e4e4e7")))
+                painter.setFont(QFont("Inter", 8, QFont.Bold))
+                painter.drawText(QRectF(x - 8, y - 16, bar_width + 16, 14), Qt.AlignCenter, self.format_hours(seconds))
+
+            painter.setPen(QPen(QColor("#a1a1aa")))
+            painter.setFont(QFont("Inter", 9))
+            painter.drawText(QRectF(x - 8, height - bottom + 8, bar_width + 16, 18), Qt.AlignCenter, label)
+
+    @staticmethod
+    def format_hours(seconds):
+        minutes = round(seconds / 60)
+        return f"{minutes / 60:.1f} sa" if minutes >= 60 else f"{minutes} dk"
+
+    def mouseMoveEvent(self, event):
+        if not self.data:
+            return
+        width = self.width()
+        left = 12
+        bar_gap = 10
+        bar_width = max(18, int((width - 24 - bar_gap * (len(self.data) - 1)) / len(self.data)))
+        index = int((event.position().x() - left) / (bar_width + bar_gap))
+        if 0 <= index < len(self.data):
+            label, seconds = self.data[index]
+            QToolTip.showText(
+                self.mapToGlobal(event.position().toPoint()),
+                f"{label}: {self.format_hours(seconds)} çalışma",
+                self,
+            )
+        else:
+            QToolTip.hideText()
+
+    def leaveEvent(self, event):
+        QToolTip.hideText()
+        super().leaveEvent(event)
+
+
 class AssessmentDonutChart(QWidget):
     def __init__(self, segments: list):
         super().__init__()
@@ -271,9 +346,10 @@ class StatBadge(QFrame):
 
 
 class DashboardView(QWidget):
-    def __init__(self, db):
+    def __init__(self, db, main_window=None):
         super().__init__()
         self.db = db
+        self.main_window = main_window
         self.init_ui()
 
     def init_ui(self):
@@ -345,6 +421,9 @@ class DashboardView(QWidget):
         # 3. Grafik Bölümü (Analitik Kartı)
         self.charts_card = self.create_analytics_card()
         self.content_lay.addWidget(self.charts_card)
+
+        self.study_time_card = self.create_study_time_card()
+        self.content_lay.addWidget(self.study_time_card)
 
         # 4. Ana Detay Grid Paneli
         self.grid = QGridLayout()
@@ -483,6 +562,48 @@ class DashboardView(QWidget):
 
         return card
 
+    def create_study_time_card(self):
+        card = QFrame()
+        card.setObjectName("Card")
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(8)
+
+        header = QHBoxLayout()
+        title = QLabel("⏱️ Toplam Ders Çalışma Süresi")
+        title.setStyleSheet("font-size: 14px; font-weight: 700; color: #ffffff;")
+        self.study_time_summary = QLabel("Veri yok")
+        self.study_time_summary.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: 700;")
+
+        btn_open_timer = QPushButton("⏱ Sayacı Aç")
+        btn_open_timer.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_open_timer.setStyleSheet("background-color: #1c1917; color: #38bdf8; border: 1px solid #38bdf8; border-radius: 5px; padding: 5px 9px; font-weight: 600;")
+        btn_open_timer.clicked.connect(self.open_focus_timer)
+
+        self.study_period_combo = QComboBox()
+        self.study_period_combo.addItems(["Haftalık", "Aylık"])
+        self.study_period_combo.setFixedWidth(110)
+        self.study_period_combo.setStyleSheet("background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 5px; padding: 5px;")
+        self.study_period_combo.currentIndexChanged.connect(self._update_study_chart)
+
+        header.addWidget(title)
+        header.addStretch()
+        header.addWidget(self.study_time_summary)
+        header.addWidget(btn_open_timer)
+        header.addWidget(self.study_period_combo)
+        lay.addLayout(header)
+
+        self.study_time_chart = StudyTimeBarChart([])
+        lay.addWidget(self.study_time_chart)
+        return card
+
+    def open_focus_timer(self):
+        if not self.main_window:
+            return
+        self.main_window.navigate_to(6)
+        if hasattr(self.main_window, "music_view"):
+            self.main_window.music_view.tabs.setCurrentIndex(2)
+
     def refresh(self):
         now = datetime.now()
         hour = now.hour
@@ -525,6 +646,7 @@ class DashboardView(QWidget):
         self.badge_workout.update_data(w_text, f"{DAYS_TR[today_dow]} Rutini")
 
         self._update_charts()
+        self._update_study_chart()
         self._rebuild_grid()
 
     def _update_charts(self):
@@ -552,6 +674,43 @@ class DashboardView(QWidget):
                 segments.append((r["title"], r["weight"], c))
 
         self.donut_chart.set_segments(segments)
+
+    def _update_study_chart(self):
+        today = date.today()
+        is_monthly = self.study_period_combo.currentText() == "Aylık"
+        day_count = 30 if is_monthly else 7
+        start_date = today - timedelta(days=day_count - 1)
+        daily_seconds = {}
+
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT log_date, seconds FROM study_time_logs WHERE log_date BETWEEN ? AND ?",
+                (start_date.isoformat(), today.isoformat()),
+            )
+            daily_seconds = {row["log_date"]: row["seconds"] for row in cur.fetchall()}
+
+        if is_monthly:
+            chart_data = []
+            for bucket in range(5):
+                bucket_start = start_date + timedelta(days=bucket * 7)
+                bucket_end = min(today, bucket_start + timedelta(days=6))
+                seconds = sum(
+                    daily_seconds.get((bucket_start + timedelta(days=offset)).isoformat(), 0)
+                    for offset in range((bucket_end - bucket_start).days + 1)
+                )
+                chart_data.append((f"{bucket + 1}. Hafta", seconds))
+        else:
+            chart_data = []
+            for offset in range(day_count):
+                target = start_date + timedelta(days=offset)
+                chart_data.append((DAYS_SHORT_TR[target.weekday()], daily_seconds.get(target.isoformat(), 0)))
+
+        total_seconds = sum(seconds for _, seconds in chart_data)
+        total_hours = total_seconds / 3600
+        period_label = "son 30 gün" if is_monthly else "son 7 gün"
+        self.study_time_summary.setText(f"{total_hours:.1f} saat • {period_label}")
+        self.study_time_chart.set_data(chart_data)
 
     def _rebuild_grid(self):
         while self.grid.count():

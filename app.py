@@ -1186,7 +1186,7 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         
-        self.dashboard_view = DashboardView(self.db)
+        self.dashboard_view = DashboardView(self.db, self)
         self.todo_view = TodoView(self.db)
         self.calendar_view = CalendarView(self.db)
         self.timetable_view = TimetableView(self.db)
@@ -1313,6 +1313,7 @@ class MainWindow(QMainWindow):
         bus.courses_changed.connect(self.calendar_view.refresh_calendar)
         bus.courses_changed.connect(self.timetable_view.load_schedule)
         bus.courses_changed.connect(self.vault_view.refresh_course_filter)
+        bus.study_time_changed.connect(self.dashboard_view.refresh)
         
         bus.assessments_changed.connect(self.dashboard_view.refresh)
         bus.assessments_changed.connect(self.calendar_view.refresh_calendar)
