@@ -362,6 +362,12 @@ class DashboardView(QWidget):
         self.weather_timer = QTimer(self)
         self.weather_timer.timeout.connect(self.fetch_weather)
         self.weather_timer.start(1800000)
+
+        self.weather_connection_timer = QTimer(self)
+        self.weather_connection_timer.timeout.connect(self.check_weather_connection)
+        self.weather_connection_timer.start(15000)
+        self.weather_online = None
+
         self.fetch_weather()
 
         self.refresh()
@@ -384,8 +390,27 @@ class DashboardView(QWidget):
         self.weather_worker.finished.connect(self.weather_worker.deleteLater)
         self.weather_worker.start()
 
+    def check_weather_connection(self):
+        from core.network import check_internet_connection
+
+        online = check_internet_connection(timeout=3)
+        if online == self.weather_online:
+            return
+
+        self.weather_online = online
+        if not online:
+            self.set_weather_text("🔌 Offline")
+            return
+
+        self.set_weather_text("Hava durumu güncelleniyor...")
+        self.fetch_weather()
+
     def set_weather_text(self, text):
         try:
+            if text.startswith("🔌 Offline"):
+                self.weather_online = False
+            elif text and text != "Hava durumu güncelleniyor...":
+                self.weather_online = True
             self.lbl_weather.setText(text)
         except RuntimeError:
             pass
