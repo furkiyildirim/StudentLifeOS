@@ -16,17 +16,41 @@ Student Life OS, universite ogrencilerinin ders programini, gorevlerini, projele
 
 ## Uygulama Goruntuleri
 
-Ekran goruntulerini `images/` klasorune ekleyin. Asagidaki dosya adlarini kullanirsaniz gorseller README icinde otomatik olarak gorunur:
+Uygulamanin ekran goruntuleri `images/` klasorunden:
 
 ![Dashboard](images/dashboard.png)
 
+![Takvim](images/calendar.png)
+
 ![Ders Programi](images/timetable.png)
 
-![Takvim](images/calendar.png)
+![Ders Programi Detayi](images/timetable2.png)
 
 ![AI Asistani](images/ai-assistant.png)
 
 ![Gorevler](images/tasks.png)
+
+![Muzik](images/music.png)
+
+![Muzik Detayi](images/music2.png)
+
+![Projeler](images/procject.png)
+
+![Universite](images/uni.png)
+
+![Universite Detayi](images/uni2.png)
+
+![Ayarlar](images/settings.png)
+
+![Ayarlar Detayi](images/settings2.png)
+
+![Materyal Kasasi](images/vault.png)
+
+![Materyal Kasasi Detayi](images/vault2.png)
+
+![Materyal Kasasi Notlar](images/vault3.png)
+
+![Materyal Kasasi Dosyalar](images/vault4.png)
 
 Yeni bir ekran goruntusu eklemek icin dosyayi `images/` klasorune koyup README'ye su formatta bir satir ekleyin:
 
