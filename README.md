@@ -185,24 +185,38 @@ Uygulamayi yeniden baslattiktan sonra AI asistani icinden `Yerel` model secenegi
 PyInstaller, uygulamayi ve Python kodunu Windows icin calistirilabilir dosyaya paketler. Proje klasorunde sanal ortam aktifken:
 
 ```powershell
-python -m PyInstaller --noconfirm --clean --windowed --name StudentLifeOS --icon resources/icons/icon.ico --add-data "resources;resources" --add-data "schema.sql;." --collect-all llama_cpp app.py
+.\build_exe.ps1
 ```
 
-Olusan uygulama `dist/StudentLifeOS/StudentLifeOS.exe` konumunda bulunur. Bu yontem `--onedir` paketidir ve Qt WebEngine ile yerel model dosyalari icin onerilir.
+Betik, `StudentLifeOS.spec` dosyasini kullanarak uygulamayi klasor halinde olusturur. Eski derleme ciktilari temizlenir ve sonuc proje klasorundeki `Student Os/Student Life OS/` dizinine yazilir.
+
+Olusan klasor yapisi:
+
+```text
+Student Os/
+└── Student Life OS/
+	├── StudentLifeOS.exe
+	├── resources/
+	└── _internal/
+		├── *.dll
+		└── diger PyInstaller bagimliliklari
+```
+
+`resources/` klasoru EXE ile ayni seviyede tutulur; ikonlar, sesler, stiller ve yerel model bu klasorden okunur. `_internal/` klasoru PyInstaller tarafindan uretilen DLL ve diger bagimliliklari icerir. Dagitim yaparken `Student Life OS/` klasorunun tamamini birlikte tasiyin.
 
 ### EXE'yi calistirma
 
 ```powershell
-dist\StudentLifeOS\StudentLifeOS.exe
+Set-Location "Student Os\Student Life OS"
+.\StudentLifeOS.exe
 ```
 
 ### Dagitim notlari
 
-- `resources/` klasoru paketleme sirasinda `--add-data` ile dahil edilir; ikon, sesler, stiller ve model dosyalari bu klasorden okunur.
-- `local_model.gguf` buyuk oldugu icin EXE'nin icine gomulmek yerine dagitim klasorunde tutulmasi tercih edilebilir. Bu durumda `dist/StudentLifeOS/resources/models/local_model.gguf` yoluna kopyalayin.
-- EXE, yerel model olmadan da acilabilir; ancak `Yerel` AI secenegi icin model dosyasini `dist/StudentLifeOS/resources/models/local_model.gguf` konumuna ayri olarak kopyalamaniz gerekir.
+- `resources/` klasoru EXE ile ayni seviyede olmalidir. EXE'yi tek basina baska bir klasore tasimayin.
+- `_internal/` klasorundeki DLL dosyalari ve diger bagimliliklar calisma icin gereklidir.
+- `local_model.gguf` yaklasik 1.8 GB oldugu icin kaynak `resources/models/` klasorune elle eklenmelidir; dosya GitHub reposuna dahil edilmez.
 - Uygulama calisirken olusan `student_life.db` ve `vault_storage/` kullanici verileridir; yedeklemek icin bu iki yolu kopyalayin.
-- Tek dosyali paket gerekiyorsa `--onedir` yerine `--onefile` kullanilabilir. Ancak baslangic daha yavas olur ve buyuk model dosyasini paketlemek pratik olmayabilir.
 
 ## Gelismis Kullanim
 
@@ -248,10 +262,10 @@ python -m pip install llama-cpp-python --extra-index-url https://abetlen.github.
 Once konsol ciktilarini gorebilmek icin uygulamayi `--console` ile yeniden paketleyin:
 
 ```powershell
-python -m PyInstaller --noconfirm --clean --console --name StudentLifeOS --add-data "resources;resources" --add-data "schema.sql;." --collect-all llama_cpp app.py
+python -m PyInstaller --noconfirm --clean --console --distpath "Student Os" --workpath "Student Os\build" StudentLifeOS.spec
 ```
 
-Ardindan `dist/StudentLifeOS/StudentLifeOS.exe` komutunu PowerShell'den calistirip hata mesajini inceleyin.
+Ardindan `Student Os\Student Life OS\StudentLifeOS.exe` dosyasini PowerShell'den calistirip hata mesajini inceleyin. PyInstaller'in guncel yapisini kullanmak icin mumkunse hata ayiklamada da `StudentLifeOS.spec` dosyasini temel alin.
 
 ## Lisans
 
