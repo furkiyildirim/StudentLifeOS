@@ -52,6 +52,38 @@ API anahtarlari uygulama icindeki AI asistani ayarlarindan girilebilir. Kullanil
 
 API anahtarlarini kaynak koduna veya `requirements.txt` dosyasina yazmayin.
 
+## Yerel Modeli Indirme
+
+Yerel AI asistani icin Qwen2.5 Coder 3B Instruct modelinin GGUF formatindaki `Q4_K_M` quantization dosyasi kullanilir. Model dosyasi yaklasik 1.8 GB oldugu icin GitHub deposuna dahil edilmez.
+
+### PowerShell ile indirme
+
+Proje klasorunde PowerShell acip su komutlari calistirin:
+
+```powershell
+New-Item -ItemType Directory -Force resources\models | Out-Null
+Invoke-WebRequest `
+	-Uri "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf?download=true" `
+	-OutFile "resources\models\local_model.gguf"
+```
+
+Indirme tamamlandiktan sonra dosyanin dogru konumda ve yeterli boyutta oldugunu kontrol edin:
+
+```powershell
+Get-Item resources\models\local_model.gguf | Select-Object FullName,Length
+```
+
+Dosya adi tam olarak `local_model.gguf` olmalidir. Windows dosya uzantilarini gizliyorsa dosyanin yanlislikla `local_model.gguf.gguf` olarak kaydedilmedigini kontrol edin.
+
+### Tarayici ile indirme
+
+1. [Qwen2.5-Coder-3B-Instruct-GGUF model sayfasini](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF) acin.
+2. `qwen2.5-coder-3b-instruct-q4_k_m.gguf` dosyasini indirin.
+3. Dosyayi proje icindeki `resources/models/` klasorune tasiyin.
+4. Dosyanin adini `local_model.gguf` olarak degistirin.
+
+Uygulamayi yeniden baslattiktan sonra AI asistani icinden `Yerel` model secenegini kullanabilirsiniz. Model bulunamazsa uygulama `resources/models/local_model.gguf` yolunu kontrol eder.
+
 ## Windows EXE Olusturma
 
 PyInstaller, uygulamayi ve Python kodunu Windows icin calistirilabilir dosyaya paketler. Proje klasorunde sanal ortam aktifken:
@@ -72,6 +104,7 @@ dist\StudentLifeOS\StudentLifeOS.exe
 
 - `resources/` klasoru paketleme sirasinda `--add-data` ile dahil edilir; ikon, sesler, stiller ve model dosyalari bu klasorden okunur.
 - `local_model.gguf` buyuk oldugu icin EXE'nin icine gomulmek yerine dagitim klasorunde tutulmasi tercih edilebilir. Bu durumda `dist/StudentLifeOS/resources/models/local_model.gguf` yoluna kopyalayin.
+- EXE, yerel model olmadan da acilabilir; ancak `Yerel` AI secenegi icin model dosyasini `dist/StudentLifeOS/resources/models/local_model.gguf` konumuna ayri olarak kopyalamaniz gerekir.
 - Uygulama calisirken olusan `student_life.db` ve `vault_storage/` kullanici verileridir; yedeklemek icin bu iki yolu kopyalayin.
 - Tek dosyali paket gerekiyorsa `--onedir` yerine `--onefile` kullanilabilir. Ancak baslangic daha yavas olur ve buyuk model dosyasini paketlemek pratik olmayabilir.
 
