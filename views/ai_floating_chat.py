@@ -30,6 +30,7 @@ class AIWorker(QThread):
 
     def run(self):
         if "Yerel" not in self.model_choice and not self.api_key:
+            self.is_running = False
             self.error_occurred.emit("API Anahtarı eksik!")
             return
 
@@ -51,6 +52,7 @@ class AIWorker(QThread):
                 model_path = os.path.join("resources", "models", "local_model.gguf")
                 if not os.path.exists(model_path):
                     self.error_occurred.emit("Model dosyası bulunamadı! Lütfen 'resources/models/local_model.gguf' konumuna ekleyin.")
+                    self.is_running = False
                     return
 
                 optimal_threads = max(1, multiprocessing.cpu_count() - 1)
@@ -75,6 +77,7 @@ class AIWorker(QThread):
                 self.chat_history = [{"role": "system", "content": system_prompt}]
                 self.system_ready.emit()
             except Exception as e:
+                self.is_running = False
                 self.error_occurred.emit(f"Yerel Model Hatası: {str(e)}")
                 return
             
@@ -86,6 +89,7 @@ class AIWorker(QThread):
                 self.chat_session = model.start_chat(enable_automatic_function_calling=True)
                 self.system_ready.emit()
             except Exception as e:
+                self.is_running = False
                 self.error_occurred.emit(f"Başlatma Hatası: {str(e)}")
                 return
         else:
@@ -252,10 +256,34 @@ class AIChatWindow(QFrame):
     def hideEvent(self, event):
         super().hideEvent(event)
         if self.worker:
-            self.worker.stop()
-            self.worker.deleteLater()
+            worker = self.worker
             self.worker = None
+            self.stop_worker(worker)
             self.chat_display.append("<br><span style='color:#a1a1aa;'>Sistem: Asistan uyku moduna geçti (RAM temizlendi).</span>")
+
+    def closeEvent(self, event):
+        if self.worker:
+            worker = self.worker
+            self.worker = None
+            self.stop_worker(worker)
+        event.accept()
+
+    def stop_worker(self, worker):
+        try:
+            worker.response_ready.disconnect()
+            worker.error_occurred.disconnect()
+            worker.system_ready.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
+        worker.stop()
+        if worker.isRunning():
+            worker.wait(3000)
+
+        if worker.isRunning():
+            worker.finished.connect(worker.deleteLater)
+        else:
+            worker.deleteLater()
 
     def update_typing(self):
         self.typing_dots = (self.typing_dots + 1) % 4
@@ -263,15 +291,9 @@ class AIChatWindow(QFrame):
 
     def reset_ai(self, val=None):
         if self.worker:
-            self.worker.stop()
-            try:
-                self.worker.response_ready.disconnect()
-                self.worker.error_occurred.disconnect()
-                self.worker.system_ready.disconnect()
-            except Exception: pass
-            
-            self.worker.deleteLater()
+            worker = self.worker
             self.worker = None
+            self.stop_worker(worker)
             
         self.typing_timer.stop()
         self.lbl_typing.hide()
@@ -291,22 +313,12 @@ class AIChatWindow(QFrame):
         self.setup_ai()
 
     def setup_ai(self):
-        try:
-            from core.network import check_internet_connection
-            if not check_internet_connection():
-                self.chat_display.clear()
-                self.chat_display.append("<span style='color:#ef4444;'>Sistem: 🔴 Offline (İnternet Yok). Asistanı kullanabilmek için lütfen internete bağlanın.</span>")
-                if hasattr(self, 'input_field'): self.input_field.setEnabled(False)
-                if hasattr(self, 'btn_send'): self.btn_send.setEnabled(False)
-                return False
-        except Exception:
-            pass
-
         selected_model = self.model_combo.currentText()
         key_name = "gemini_api_key"
         
         if "Yerel" in selected_model:
             self.worker = AIWorker(self.db, selected_model)
+            self.worker.finished.connect(self.worker.deleteLater)
             self.worker.response_ready.connect(self.on_response)
             self.worker.error_occurred.connect(self.on_error)
             self.worker.system_ready.connect(self.on_ready)
@@ -333,6 +345,7 @@ class AIChatWindow(QFrame):
             return False
             
         self.worker = AIWorker(self.db, selected_model)
+        self.worker.finished.connect(self.worker.deleteLater)
         self.worker.set_api_key(api_key)
         self.worker.response_ready.connect(self.on_response)
         self.worker.error_occurred.connect(self.on_error)
@@ -347,15 +360,6 @@ class AIChatWindow(QFrame):
         self.btn_send.setEnabled(True)
 
     def send_message(self):
-        try:
-            from core.network import check_internet_connection
-            if not check_internet_connection() and "Yerel" not in self.model_combo.currentText():
-                self.chat_display.append("<br><span style='color:#ef4444;'><b>Sistem:</b> 🔴 İnternet bağlantısı koptu. Mesaj gönderilemedi.</span>")
-                self.scroll_to_bottom()
-                return
-        except Exception:
-            pass
-
         text = self.input_field.text().strip()
         if not text: return
         
@@ -378,7 +382,7 @@ class AIChatWindow(QFrame):
         self.typing_timer.stop()
         self.lbl_typing.hide()
         
-        formatted = reply_text.replace('\n', '<br>')
+        formatted = str(reply_text or "").replace('\n', '<br>')
         model_name = self.model_combo.currentText().split(' ')[0]
         self.chat_display.append(f"<b style='color:#10b981;'>{model_name}:</b> {formatted}<br><br>")
         
