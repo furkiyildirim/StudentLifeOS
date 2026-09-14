@@ -1,6 +1,7 @@
 import sys
 import os
 import shutil
+import tempfile
 import winreg
 import ctypes
 import json
@@ -40,6 +41,37 @@ except ImportError:
 SOUNDS_DIR = "resources/notification_sounds" if os.path.exists("resources/notification_sounds") else "resources/notification_sounds"
 if not os.path.exists(SOUNDS_DIR):
     os.makedirs(SOUNDS_DIR)
+
+_SINGLE_INSTANCE_LOCK = None
+
+def ensure_single_instance():
+    global _SINGLE_INSTANCE_LOCK
+    lock_name = "student_life_os_single_instance.lock"
+    lock_path = os.path.join(tempfile.gettempdir(), lock_name)
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+    except FileExistsError:
+        return False
+
+    _SINGLE_INSTANCE_LOCK = fd
+    return True
+
+def remove_single_instance_lock():
+    global _SINGLE_INSTANCE_LOCK
+    if _SINGLE_INSTANCE_LOCK is not None:
+        try:
+            os.close(_SINGLE_INSTANCE_LOCK)
+        except OSError:
+            pass
+        _SINGLE_INSTANCE_LOCK = None
+
+    lock_name = "student_life_os_single_instance.lock"
+    lock_path = os.path.join(tempfile.gettempdir(), lock_name)
+    try:
+        os.remove(lock_path)
+    except FileNotFoundError:
+        pass
+
 
 def remove_autostart_entry():
     startup_dir = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs\Startup")
@@ -1373,6 +1405,10 @@ class MainWindow(QMainWindow):
     
 
 if __name__ == "__main__":
+    if not ensure_single_instance():
+        print("Student Life OS already running.")
+        sys.exit(0)
+
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     remove_autostart_entry()
     
@@ -1403,5 +1439,8 @@ if __name__ == "__main__":
     
     if not start_hidden:
         splash.start(lambda: win.show_and_activate())
-    
-    sys.exit(app.exec())
+
+    try:
+        sys.exit(app.exec())
+    finally:
+        remove_single_instance_lock()

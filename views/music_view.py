@@ -171,6 +171,8 @@ class MusicView(QWidget):
         
         self.is_shuffle = False
         self.is_repeat = False
+        self.shuffle_played_tracks = set()
+        self.shuffle_recent_tracks = []
         
         self.music_dir = os.path.join(os.getcwd(), "resources", "musics")
         self.cover_dir = os.path.join(os.getcwd(), "resources", "covers")
@@ -513,6 +515,8 @@ class MusicView(QWidget):
         self.active_playlist_id = playlist_id
         self.playlist_widget.clear()
         self.current_playlist_tracks.clear()
+        self.shuffle_played_tracks.clear()
+        self.shuffle_recent_tracks.clear()
         
         with self.db.get_connection() as conn:
             cur = conn.cursor()
@@ -655,6 +659,12 @@ class MusicView(QWidget):
     # =========================================================================
     def toggle_shuffle(self):
         self.is_shuffle = not self.is_shuffle
+        if self.is_shuffle:
+            self.shuffle_played_tracks.clear()
+            self.shuffle_recent_tracks.clear()
+            current_item = self.playlist_widget.currentItem()
+            if current_item:
+                self.record_shuffle_track(current_item.data(Qt.UserRole))
         color = "#1db954" if self.is_shuffle else "#ffffff"
         icon_path = os.path.join("resources", "icons", "shuffle.ico")
         self.btn_shuffle.setIcon(self.get_tinted_icon(icon_path, color))
@@ -680,12 +690,44 @@ class MusicView(QWidget):
             self.player.setPosition(0)
             self.player.play()
         elif self.is_shuffle:
-            self.current_track_index = random.randint(0, self.playlist_widget.count() - 1)
-            item = self.playlist_widget.item(self.current_track_index)
+            file_path = self.select_shuffle_track()
+            item = next((self.playlist_widget.item(i) for i in range(self.playlist_widget.count())
+                         if self.playlist_widget.item(i).data(Qt.UserRole) == file_path), None)
+            if not item:
+                return
+            self.current_track_index = self.playlist_widget.row(item)
             self.playlist_widget.setCurrentItem(item)
-            self.load_and_play(item.data(Qt.UserRole))
+            self.load_and_play(file_path)
         else:
             self.play_next()
+
+    def record_shuffle_track(self, file_path):
+        if not file_path:
+            return
+
+        self.shuffle_played_tracks.add(file_path)
+        if file_path in self.shuffle_recent_tracks:
+            self.shuffle_recent_tracks.remove(file_path)
+        self.shuffle_recent_tracks.append(file_path)
+        del self.shuffle_recent_tracks[:-5]
+
+    def select_shuffle_track(self):
+        tracks = [self.playlist_widget.item(i).data(Qt.UserRole)
+                  for i in range(self.playlist_widget.count())]
+        if not tracks:
+            return None
+
+        candidates = [path for path in tracks if path not in self.shuffle_played_tracks]
+        if not candidates:
+            self.shuffle_played_tracks.clear()
+            candidates = [path for path in tracks if path not in self.shuffle_recent_tracks]
+
+        current_item = self.playlist_widget.currentItem()
+        current_path = current_item.data(Qt.UserRole) if current_item else None
+        if len(candidates) > 1 and current_path in candidates:
+            candidates.remove(current_path)
+
+        return random.choice(candidates or tracks)
 
     def add_track_to_ui(self, file_path):
         for i in range(self.playlist_widget.count()):
@@ -740,6 +782,9 @@ class MusicView(QWidget):
         self.load_and_play(file_path)
 
     def load_and_play(self, file_path):
+        if self.is_shuffle:
+            self.record_shuffle_track(file_path)
+
         name = os.path.basename(file_path)
         self.lbl_track_name.setText(name)
         
