@@ -1,6 +1,5 @@
 import requests
 from datetime import datetime, date, timedelta
-from urllib.parse import quote
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QGridLayout, QCheckBox, QScrollArea, QPushButton,
@@ -17,6 +16,30 @@ DAYS_SHORT_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
 # --- GÜVENLİ HAVA DURUMU İŞ PARÇACĞI ---
 class WeatherWorker(QThread):
     result_ready = Signal(str)
+
+    WEATHER_CODES = {
+        0: "Açık",
+        1: "Çoğunlukla açık",
+        2: "Parçalı bulutlu",
+        3: "Kapalı",
+        45: "Sisli",
+        48: "Kırağılı sis",
+        51: "Hafif çisenti",
+        53: "Çisenti",
+        55: "Yoğun çisenti",
+        61: "Hafif yağmur",
+        63: "Yağmurlu",
+        65: "Kuvvetli yağmur",
+        71: "Hafif kar",
+        73: "Kar yağışlı",
+        75: "Kuvvetli kar",
+        80: "Sağanak yağış",
+        81: "Kuvvetli sağanak",
+        82: "Çok kuvvetli sağanak",
+        95: "Gök gürültülü fırtına",
+        96: "Dolu ihtimali olan fırtına",
+        99: "Kuvvetli dolulu fırtına",
+    }
 
     def __init__(self, db):
         super().__init__()
@@ -36,23 +59,55 @@ class WeatherWorker(QThread):
                 m_loc = cur.fetchone()
                 selected_city = m_loc[0].strip() if m_loc and m_loc[0] != "1" else ""
 
+            location_params = {
+                "count": 1,
+                "language": "tr",
+                "format": "json",
+            }
             if selected_city and selected_city != "Otomatik Konum":
-                url = f"https://wttr.in/{quote(selected_city)}?format=%l:+%t+%c"
-            else:
-                url = "https://wttr.in/?format=%l:+%t+%c"
-
-            resp = requests.get(
-                url,
-                headers={"User-Agent": "StudentLifeOS/1.0"},
-                timeout=(5, 15),
-            )
-            if resp.status_code == 200:
-                weather_text = resp.text.strip()
-                self.result_ready.emit(
-                    f"📍 {weather_text}" if weather_text else "📍 Hava durumu alınamadı"
+                location_params["name"] = selected_city
+                location_response = requests.get(
+                    "https://geocoding-api.open-meteo.com/v1/search",
+                    params=location_params,
+                    timeout=(5, 10),
                 )
+                location_response.raise_for_status()
+                locations = location_response.json().get("results", [])
+                if not locations:
+                    self.result_ready.emit("📍 Şehir bulunamadı")
+                    return
+                location = locations[0]
             else:
-                self.result_ready.emit("📍 Hava durumu alınamadı")
+                location_response = requests.get(
+                    "https://ipapi.co/json/",
+                    timeout=(5, 10),
+                )
+                location_response.raise_for_status()
+                ip_location = location_response.json()
+                location = {
+                    "name": ip_location.get("city", "Konum"),
+                    "latitude": ip_location["latitude"],
+                    "longitude": ip_location["longitude"],
+                }
+
+            weather_response = requests.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": location["latitude"],
+                    "longitude": location["longitude"],
+                    "current": "temperature_2m,weather_code",
+                    "timezone": "auto",
+                },
+                timeout=(5, 10),
+            )
+            weather_response.raise_for_status()
+            current = weather_response.json()["current"]
+            description = self.WEATHER_CODES.get(
+                current["weather_code"], "Bilinmeyen hava durumu"
+            )
+            self.result_ready.emit(
+                f"📍 {location['name']}: {current['temperature_2m']}°C, {description}"
+            )
         except requests.RequestException:
             self.result_ready.emit("🔌 Offline / Bağlantı Hatası")
         except Exception:
