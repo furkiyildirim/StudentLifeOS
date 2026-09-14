@@ -1,10 +1,18 @@
-import socket
+import requests
 
 def check_internet_connection(timeout=3):
-    """Google DNS sunucusuna bağlanarak aktif internet bağlantısını test eder."""
+    """Check whether the weather/API network used by the app is reachable."""
     try:
-        socket.setdefaulttimeout(timeout)
-        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
+        requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": 41.0082,
+                "longitude": 28.9784,
+                "current": "temperature_2m",
+                "timezone": "auto",
+            },
+            timeout=timeout,
+        ).raise_for_status()
         return True
-    except socket.error:
+    except requests.RequestException:
         return False

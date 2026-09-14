@@ -324,6 +324,17 @@ class AIChatWindow(QFrame):
             self.worker.system_ready.connect(self.on_ready)
             self.worker.start()
             return True
+
+        from core.network import check_internet_connection
+        if not check_internet_connection():
+            self.chat_display.clear()
+            self.chat_display.append(
+                "<span style='color:#ef4444;'>Sistem: 🔴 Offline. "
+                "İnternet bağlantısı yok. Yalnızca Yerel Model kullanılabilir.</span>"
+            )
+            self.input_field.setEnabled(False)
+            self.btn_send.setEnabled(False)
+            return False
                     
         if "ChatGPT" in selected_model: key_name = "openai_api_key"
         elif "Claude" in selected_model: key_name = "anthropic_api_key"
@@ -362,6 +373,16 @@ class AIChatWindow(QFrame):
     def send_message(self):
         text = self.input_field.text().strip()
         if not text: return
+
+        if "Yerel" not in self.model_combo.currentText():
+            from core.network import check_internet_connection
+            if not check_internet_connection():
+                self.chat_display.append(
+                    "<br><span style='color:#ef4444;'><b>Sistem:</b> "
+                    "🔴 Offline. Yalnızca Yerel Model kullanılabilir.</span>"
+                )
+                self.scroll_to_bottom()
+                return
         
         if not self.worker or not self.worker.is_running:
             if not self.setup_ai(): return

@@ -47,6 +47,11 @@ class WeatherWorker(QThread):
 
     def run(self):
         try:
+            from core.network import check_internet_connection
+            if not check_internet_connection(timeout=5):
+                self.result_ready.emit("🔌 Offline")
+                return
+
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
                 cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'weather_enabled'")
