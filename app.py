@@ -1312,6 +1312,7 @@ class MainWindow(QMainWindow):
         bus.courses_changed.connect(self.dashboard_view.refresh)
         bus.courses_changed.connect(self.calendar_view.refresh_calendar)
         bus.courses_changed.connect(self.timetable_view.load_schedule)
+        bus.courses_changed.connect(self.vault_view.refresh_course_filter)
         
         bus.assessments_changed.connect(self.dashboard_view.refresh)
         bus.assessments_changed.connect(self.calendar_view.refresh_calendar)

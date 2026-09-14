@@ -675,7 +675,6 @@ class VaultView(QWidget):
         lay.addWidget(self.viewer_stack)
 
         self.refresh_course_filter()
-        self.load_materials()
         return tab
 
     def open_spreadsheet_editor(self):
@@ -689,6 +688,7 @@ class VaultView(QWidget):
         self.btn_toggle_preview.setText("👁 Ön İzlemeyi Aç" if is_hidden else "👁 Ön İzlemeyi Gizle")
 
     def refresh_course_filter(self):
+        selected_course_id = self.course_filter_cb.currentData()
         self.course_filter_cb.blockSignals(True)
         self.course_filter_cb.clear()
         self.course_filter_cb.addItem("Tüm Dersler ve Genel Materyaller", None)
@@ -698,8 +698,14 @@ class VaultView(QWidget):
             cur.execute("SELECT id, code FROM courses")
             for c in cur.fetchall():
                 self.course_filter_cb.addItem(c["code"], c["id"])
+
+        if selected_course_id is not None:
+            selected_index = self.course_filter_cb.findData(selected_course_id)
+            if selected_index >= 0:
+                self.course_filter_cb.setCurrentIndex(selected_index)
                 
         self.course_filter_cb.blockSignals(False)
+        self.load_materials()
 
     def load_materials(self):
         self.materials_list.clear()
