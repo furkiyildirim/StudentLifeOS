@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QLineEdit, QGroupBox, QFormLayout
 )
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QUrl, QVariantAnimation, QThread, Signal
-from PySide6.QtGui import QCursor, QIcon, QAction, QColor, QDesktopServices
+from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QAction, QColor
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage, QWebEngineSettings
 
@@ -36,6 +36,7 @@ try:
 except ImportError:
     ProjectView = None
 
+# Ses dizini kontrolü
 SOUNDS_DIR = "resources/notification_sounds" if os.path.exists("resources/notification_sounds") else "resources/notification_sounds"
 if not os.path.exists(SOUNDS_DIR):
     os.makedirs(SOUNDS_DIR)
@@ -55,6 +56,78 @@ QLabel { qproperty-wordWrap: 1; }
 #Card { background-color: #171412; border: 1px solid #292524; border-radius: 12px; padding: 16px; }
 #CardHeader { font-size: 15px; font-weight: 700; color: #ffffff; border-bottom: 1px solid #292524; padding-bottom: 8px; margin-bottom: 10px; }
 """
+
+class NotificationPopup(QWidget):
+    def __init__(self, main_window):
+        super().__init__(main_window)
+        self.main_window = main_window
+        history = main_window.notification_log
+        
+        self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedWidth(360)
+        
+        frame = QFrame(self)
+        frame.setStyleSheet("QFrame { background-color: #171412; border: 1px solid #3f3f46; border-radius: 8px; }")
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(0, 0, 0, 0)
+        main_lay.addWidget(frame)
+
+        lay = QVBoxLayout(frame)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        
+        header_widget = QWidget()
+        header_lay = QHBoxLayout(header_widget)
+        header_lay.setContentsMargins(16, 12, 16, 12)
+        
+        header = QLabel("📥 Son Bildirimler")
+        header.setStyleSheet("font-size: 14px; font-weight: bold; color: #38bdf8;")
+        
+        btn_clear = QPushButton("🗑 Tümünü Sil")
+        btn_clear.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_clear.setStyleSheet("""
+            QPushButton { background-color: transparent; color: #f87171; font-size: 12px; font-weight: bold; border: none; }
+            QPushButton:hover { color: #ef4444; text-decoration: underline; }
+        """)
+        btn_clear.clicked.connect(self.clear_history)
+        
+        header_lay.addWidget(header)
+        header_lay.addStretch()
+        if history:
+            header_lay.addWidget(btn_clear)
+            
+        header_widget.setStyleSheet("border-bottom: 1px solid #292524;")
+        lay.addWidget(header_widget)
+        
+        list_widget = QListWidget()
+        list_widget.setWordWrap(True)
+        list_widget.setStyleSheet("""
+            QListWidget { background-color: transparent; border: none; outline: none; padding: 4px; }
+            QListWidget::item { padding: 12px; border-bottom: 1px solid #1f1b18; border-radius: 6px; }
+            QListWidget::item:hover { background-color: #1c1917; }
+            QListWidget::item:selected { background-color: #27272a; }
+        """)
+        
+        if not history:
+            item = QListWidgetItem("Henüz bir bildirim yok.")
+            item.setForeground(QColor("#71717a"))
+            item.setTextAlignment(Qt.AlignCenter)
+            list_widget.addItem(item)
+        else:
+            for time_str, t, m, c in history:
+                item = QListWidgetItem(f"[{time_str}] {t}\n{m}")
+                item.setForeground(QColor(c))
+                list_widget.addItem(item)
+                
+        list_height = min(400, max(60, list_widget.count() * 65 + 10))
+        list_widget.setFixedHeight(list_height)
+        lay.addWidget(list_widget)
+
+    def clear_history(self):
+        self.main_window.notification_log.clear()
+        self.main_window.btn_notif_history.setText("🔔 Bildirimler (0)")
+        self.close()
 
 class ToastNotification(QFrame):
     def __init__(self, parent, title, message, color="#38bdf8"):
@@ -179,7 +252,6 @@ class SplashScreen(QWidget):
                 play_action_sound("startup")
             except: pass
             self.callback() 
-
 class NetworkWorker(QThread):
     status_changed = Signal(bool)
 
@@ -193,17 +265,19 @@ class NetworkWorker(QThread):
         import socket
         while self.is_running:
             try:
+                # 8.8.8.8 (Google DNS) adresine 2 saniyelik zaman aşımı ile hızlı ping atar
                 socket.setdefaulttimeout(2)
                 socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("8.8.8.8", 53))
                 status = True
             except Exception:
                 status = False
 
+            # Durum değiştiğinde arayüze anında sinyal gönderir
             if status != self.current_status:
                 self.current_status = status
                 self.status_changed.emit(status)
             
-            time.sleep(3)
+            time.sleep(3) # Sistemi yormamak için her 3 saniyede bir kontrol eder
 
 class SettingsView(QWidget):
     def __init__(self, main_window=None):
@@ -430,7 +504,111 @@ class SettingsView(QWidget):
         c_lay.addWidget(desc)
         lay.addWidget(sys_card)
 
-        # Kurucu Bilgileri Kartı
+        
+
+        # --- HAVA DURUMU AYAR KARTI ---
+        weather_card = QFrame()
+        weather_card.setObjectName("Card")
+        w_lay = QVBoxLayout(weather_card)
+        
+        lbl_w_title = QLabel("🌤️ Hava Durumu Seçenekleri")
+        lbl_w_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #38bdf8;")
+        w_lay.addWidget(lbl_w_title)
+
+        self.chk_weather = QCheckBox("Kontrol Panelinde Hava Durumunu Göster")
+        self.chk_weather.setStyleSheet("color: white; font-weight: bold;")
+        self.chk_weather.setChecked(self.get_db_setting('weather_enabled', '1') == '1')
+        
+        # 81 İli barındıran hazır liste
+        cities = [
+            "Otomatik Konum", "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir",
+            "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli",
+            "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari",
+            "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir",
+            "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla", "Muş", "Nevşehir",
+            "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat",
+            "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman",
+            "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
+        ]
+
+        self.city_combo = QComboBox()
+        self.city_combo.addItems(cities)
+        self.city_combo.setStyleSheet("background-color: #27272a; border-radius: 6px; padding: 8px; color: white; border: 1px solid #3f3f46;")
+        
+        # Kayıtlı şehri yükle
+        curr_city = self.get_db_setting('weather_city', 'Otomatik Konum')
+        if curr_city == '1': curr_city = 'Otomatik Konum'
+        self.city_combo.setCurrentText(curr_city)
+
+        btn_save_w = QPushButton("Kaydet")
+        btn_save_w.setCursor(QCursor(Qt.PointingHandCursor))
+        # Tıklama hissiyatı için :pressed durumuna margin/padding kaydırması eklendi
+        btn_save_w.setStyleSheet("""
+            QPushButton { 
+                background-color: #3b82f6; 
+                color: white; 
+                border-radius: 6px; 
+                padding: 10px; 
+                font-weight: bold; 
+            }
+            QPushButton:hover { background-color: #2563eb; }
+            QPushButton:pressed { 
+                background-color: #1d4ed8; 
+                padding-top: 12px; 
+                padding-bottom: 8px; 
+            }
+        """)
+        
+        def save_w():
+            # 1. Veritabanı güncellemeleri
+            self.set_db_setting('weather_enabled', '1' if self.chk_weather.isChecked() else '0')
+            self.set_db_setting('weather_city', self.city_combo.currentText())
+            
+            # 2. Kontrol Panelini Anında Yenileme
+            if hasattr(self.main_window, 'dashboard_view'):
+                dash = self.main_window.dashboard_view
+                dash.lbl_weather.setText("📍 Yeni konum hava durumu yükleniyor...")
+                
+                # Eski thread'i UI'dan kopar (Silinmiş C++ objesi hatasını engellemek için try-except kullanıyoruz)
+                if hasattr(dash, 'weather_worker'):
+                    try:
+                        if dash.weather_worker and dash.weather_worker.isRunning():
+                            dash.weather_worker.result_ready.disconnect()
+                    except RuntimeError:
+                        # İş parçacığı zaten kendini imha etmişse hatayı sessizce geç
+                        pass
+                    except Exception:
+                        pass
+                        
+                    # Yeni isteğin takılmaması için referansı temizle
+                    try: del dash.weather_worker
+                    except AttributeError: pass
+                
+                # Sıfırdan taze hava durumu çek
+                dash.fetch_weather()
+            
+            # 3. Kayıt Sesi Çalma
+            try:
+                from core.sound import play_action_sound
+                play_action_sound("save")
+            except Exception:
+                pass
+
+            # 4. Şık Bildirim Baloncuğu
+            if hasattr(self.main_window, 'send_tray_notification'):
+                self.main_window.send_tray_notification(
+                    "💾 Konum Kaydedildi", 
+                    f"Hava durumu konumu '{self.city_combo.currentText()}' olarak güncellendi ve Kontrol Paneline yansıtıldı.", 
+                    color="#10b981"
+                )
+            
+        btn_save_w.clicked.connect(save_w)
+
+        w_lay.addWidget(self.chk_weather)
+        w_lay.addWidget(self.city_combo)
+        w_lay.addWidget(btn_save_w)
+        lay.addWidget(weather_card)
+
         creator_card = QFrame()
         creator_card.setObjectName("Card")
         creator_card.setStyleSheet("#Card { border: 1px solid #3f3f46; }")
@@ -452,7 +630,7 @@ class SettingsView(QWidget):
             QPushButton { background-color: #0077b5; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold; }
             QPushButton:hover { background-color: #005582; }
         """)
-        btn_linkedin.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://linkedin.com/in/furkan-y-8874631b1")))
+        btn_linkedin.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.linkedin.com/in/furkan-y-8874631b1/")))
 
         btn_github = QPushButton("🐙 GitHub")
         btn_github.setCursor(QCursor(Qt.PointingHandCursor))
@@ -493,6 +671,7 @@ class SettingsView(QWidget):
         self.set_db_setting('openai_api_key', self.openai_input.text().strip())
         self.set_db_setting('anthropic_api_key', self.anthropic_input.text().strip())
         
+        # Pop-up yerine Toast bildirim
         if hasattr(self.main_window, 'send_tray_notification'):
             self.main_window.send_tray_notification(
                 "💾 Ayarlar Kaydedildi", 
@@ -614,6 +793,9 @@ class MainWindow(QMainWindow):
         self.is_navigating_history = False
         self.is_sidebar_expanded = True
         
+        self.notified_events = set()
+        self.notification_log = [] 
+        
         self.app_started_time = datetime.now()
         self.notif_queue = []
         self.notif_processing = False
@@ -710,10 +892,12 @@ class MainWindow(QMainWindow):
                 title = "Güne Başlarken ☀️"
                 msg = f"Günaydın! Bugün seni bekleyen {todo_count} görev ve {plan_count} plan var. Verimli bir gün dileriz!"
                 color = "#10b981"
+                self.notified_events.add(f"morning_{today_iso}") 
             elif 16 <= now.hour < 23:
                 title = "Gün Sonu Özeti 🌙"
                 msg = f"İyi akşamlar! Bugün tamamlanmamış {todo_count} görevin ve {plan_count} planın kaldı. Göz atmak ister misin?"
                 color = "#f59e0b"
+                self.notified_events.add(f"eod_{today_iso}") 
             else:
                 title = "Sistem Aktif 🚀"
                 msg = "Öğrenci Asistanı başarıyla başlatıldı. Çalışmalarında kolaylıklar dileriz!"
@@ -733,6 +917,13 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def send_tray_notification(self, title, message, color="#38bdf8", sound_key=None):
+        time_str = datetime.now().strftime("%H:%M")
+        self.notification_log.insert(0, (time_str, title, message, color))
+        if len(self.notification_log) > 20: 
+            self.notification_log.pop()
+            
+        self.btn_notif_history.setText(f"🔔 Bildirimler ({len(self.notification_log)})")
+
         self.notif_queue.append((title, message, color, sound_key))
         
         if not self.notif_processing:
@@ -769,6 +960,13 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(4500, self.process_next_notif)
 
+    def show_notif_history(self):
+        self.notif_popup = NotificationPopup(self)
+        rect = self.btn_notif_history.rect()
+        bottom_right = self.btn_notif_history.mapToGlobal(rect.bottomRight())
+        self.notif_popup.move(bottom_right.x() - self.notif_popup.width(), bottom_right.y() + 4)
+        self.notif_popup.show()
+
     def setup_background_timer(self):
         self.notif_timer = QTimer(self)
         self.notif_timer.timeout.connect(self.check_upcoming_events)
@@ -785,6 +983,34 @@ class MainWindow(QMainWindow):
 
         today_iso = now.date().isoformat()
         today_dow = now.weekday()
+        
+        if 6 <= now.hour < 16:
+            morning_id = f"morning_{today_iso}"
+            if morning_id not in self.notified_events:
+                with self.db.get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT COUNT(*) FROM todo_tasks WHERE is_completed = 0")
+                    todo_count = cur.fetchone()[0]
+                    cur.execute("SELECT COUNT(*) FROM calendar_events WHERE event_date = ? AND is_completed = 0", (today_iso,))
+                    plan_count = cur.fetchone()[0]
+                    
+                if todo_count > 0 or plan_count > 0:
+                    self.send_tray_notification("Güne Başlarken ☀️", f"Bugün yapman gereken {todo_count} görev ve {plan_count} plan seni bekliyor. Listeni kontrol etmeyi unutma!", color="#10b981", sound_key="sound_plans")
+                self.notified_events.add(morning_id)
+
+        elif 16 <= now.hour < 23:
+            eod_id = f"eod_{today_iso}"
+            if eod_id not in self.notified_events:
+                with self.db.get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT COUNT(*) FROM todo_tasks WHERE is_completed = 0")
+                    todo_count = cur.fetchone()[0]
+                    cur.execute("SELECT COUNT(*) FROM calendar_events WHERE event_date = ? AND is_completed = 0", (today_iso,))
+                    plan_count = cur.fetchone()[0]
+                    
+                if todo_count > 0 or plan_count > 0:
+                    self.send_tray_notification("Gün Sonu Özeti 🌙", f"Bugün tamamlanmamış {todo_count} görevin ve {plan_count} planın var. Göz atmak ister misin?", color="#f59e0b", sound_key="sound_plans")
+                self.notified_events.add(eod_id)
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
@@ -809,12 +1035,15 @@ class MainWindow(QMainWindow):
                         event_time = datetime.strptime(f"{today_iso} {r['start_time']}", "%Y-%m-%d %H:%M")
                         delta_mins = (event_time - now).total_seconds() / 60.0
                         if 0 <= delta_mins <= 15:
-                            self.send_tray_notification(
-                                "Ders Başlıyor 🎓", 
-                                f"{r['code']} - {r['name']} yakında ({r['start_time']}) başlıyor!\nDerslik: {r['classroom']}",
-                                color="#f43f5e",
-                                sound_key="sound_classes"
-                            )
+                            notif_id = f"class_{r['code']}_{today_iso}_{r['start_time']}"
+                            if notif_id not in self.notified_events:
+                                self.send_tray_notification(
+                                    "Ders Başlıyor 🎓", 
+                                    f"{r['code']} - {r['name']} yakında ({r['start_time']}) başlıyor!\nDerslik: {r['classroom']}",
+                                    color="#f43f5e",
+                                    sound_key="sound_classes"
+                                )
+                                self.notified_events.add(notif_id)
                     except Exception: pass
 
             if notify_plans:
@@ -829,14 +1058,16 @@ class MainWindow(QMainWindow):
                         event_time = datetime.strptime(f"{today_iso} {r['start_time']}", "%Y-%m-%d %H:%M")
                         delta_mins = (event_time - now).total_seconds() / 60.0
                         if 0 <= delta_mins <= 15:
-                            self.send_tray_notification(
-                                "Plan Hatırlatıcısı ⏰", 
-                                f"'{r['title']}' planınız yakında ({r['start_time']}) başlıyor!\nKategori: {r['category']}",
-                                color="#10b981",
-                                sound_key="sound_plans"
-                            )
+                            notif_id = f"plan_{r['id']}_{today_iso}_{r['start_time']}"
+                            if notif_id not in self.notified_events:
+                                self.send_tray_notification(
+                                    "Plan Hatırlatıcısı ⏰", 
+                                    f"'{r['title']}' planınız yakında ({r['start_time']}) başlıyor!\nKategori: {r['category']}",
+                                    color="#10b981",
+                                    sound_key="sound_plans"
+                                )
+                                self.notified_events.add(notif_id)
                     except Exception: pass
-
     def update_network_ui(self, is_online):
         self.is_online_state = is_online
         if hasattr(self, 'lbl_network_status'):
@@ -848,7 +1079,6 @@ class MainWindow(QMainWindow):
                 self.lbl_network_status.setText("🔴 Offline")
                 self.lbl_network_status.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 12px; padding-right: 12px;")
                 self.send_tray_notification("Bağlantı Koptu 🔴", "Şu anda çevrimdışı çalışıyorsunuz. Web modülleri kısıtlandı.", color="#ef4444")
-                
     def init_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -856,6 +1086,9 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        # =========================================================================
+        # AÇILIP KAPANABİLEN YAN MENÜ (SIDEBAR)
+        # =========================================================================
         self.sidebar = QFrame()
         self.sidebar.setObjectName("Sidebar")
         self.sidebar.setFixedWidth(230)
@@ -926,7 +1159,7 @@ class MainWindow(QMainWindow):
         sb_lay.addWidget(self.status_lbl)
         sb_lay.addSpacing(10)
 
-        action_btn_lay = QVBoxLayout() 
+        action_btn_lay = QVBoxLayout() # Yatay dizilimi dikey olarak değiştirdik
         action_btn_lay.setSpacing(6)
 
         self.btn_hide = QPushButton("🔽 Arka Plan")
@@ -945,6 +1178,9 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.sidebar)
 
+        # =========================================================================
+        # SAĞ PANEL
+        # =========================================================================
         right_panel = QWidget()
         right_lay = QVBoxLayout(right_panel)
         right_lay.setContentsMargins(0, 0, 0, 0)
@@ -984,8 +1220,14 @@ class MainWindow(QMainWindow):
         self.lbl_network_status = QLabel("🟢 Online")
         self.lbl_network_status.setStyleSheet("color: #10b981; font-weight: bold; font-size: 12px; padding-right: 12px;")
         top_lay.addWidget(self.lbl_network_status)
-        self.is_online_state = True 
+        self.is_online_state = True # Sistemin ağ durumunu takip eden değişken
         
+        self.btn_notif_history = QPushButton("🔔 Bildirimler (0)")
+        self.btn_notif_history.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_notif_history.setStyleSheet("background-color: #27272a; color: #e4e4e7; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+        self.btn_notif_history.clicked.connect(self.show_notif_history)
+        top_lay.addWidget(self.btn_notif_history)
+
         right_lay.addWidget(top_bar)
 
         self.stack = QStackedWidget()
@@ -1055,6 +1297,7 @@ class MainWindow(QMainWindow):
             
             self.is_sidebar_expanded = False
         else:
+            # Üstteki navigasyon butonlarının genişletilmesi
             for btn in self.nav_buttons:
                 full_text = btn.property("full_text")
                 if full_text:
@@ -1062,6 +1305,7 @@ class MainWindow(QMainWindow):
                     btn.setToolTip("")
                     btn.setStyleSheet("")
                     
+            # Alt kısımdaki (Arka Plan ve Çıkış) butonların genişletilmesi [YENİ EKLENDİ]
             full_hide = self.btn_hide.property("full_text")
             if full_hide: 
                 self.btn_hide.setText(full_hide)
@@ -1088,7 +1332,6 @@ class MainWindow(QMainWindow):
             ))
 
         self.sidebar_anim.start()
-
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_ai_chat_geometry()
@@ -1097,6 +1340,7 @@ class MainWindow(QMainWindow):
         if self.ai_chat_window.isVisible():
             self.ai_chat_window.hide()
         else:
+            # Önce pencereyi ekranda gösteriyoruz, sonra konumunu güncelliyoruz[cite: 6]
             self.ai_chat_window.show()
             self.ai_chat_window.raise_()
             self.update_ai_chat_geometry()
@@ -1125,6 +1369,9 @@ class MainWindow(QMainWindow):
         bus.calendar_changed.connect(self.calendar_view.refresh_calendar)
 
     def navigate_to(self, index: int):
+        # İnternet engeli kaldırıldı
+        # Tüm sayfalara çevrimdışı olsa bile giriş yapılmasına izin verir
+
         if not self.is_navigating_history:
             if self.history and self.history[self.history_index] == index:
                 return
@@ -1167,6 +1414,8 @@ class MainWindow(QMainWindow):
         self.btn_back.setEnabled(self.history_index > 0)
         self.btn_forward.setEnabled(self.history_index < len(self.history) - 1)
 
+    
+
 if __name__ == "__main__":
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     
@@ -1187,12 +1436,15 @@ if __name__ == "__main__":
     app.setStyleSheet(GLOBAL_QSS)
     
     start_hidden = "--hidden" in sys.argv
+    
+    if not start_hidden:
+        splash = SplashScreen()
+        splash.show()
+        app.processEvents()
+    
     win = MainWindow(start_hidden=start_hidden)
     
-    if start_hidden:
-        pass
-    else:
-        splash = SplashScreen()
+    if not start_hidden:
         splash.start(lambda: win.show_and_activate())
     
     sys.exit(app.exec())
