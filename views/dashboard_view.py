@@ -368,6 +368,7 @@ class DashboardView(QWidget):
         self.weather_connection_timer.timeout.connect(self.check_weather_connection)
         self.weather_connection_timer.start(15000)
         self.weather_online = None
+        self.weather_refresh_pending = False
         self.network_information = None
         self.setup_network_monitor()
 
@@ -387,11 +388,20 @@ class DashboardView(QWidget):
 
     def fetch_weather(self):
         if hasattr(self, 'weather_worker') and self.weather_worker.isRunning():
+            self.weather_refresh_pending = True
             return
+
+        self.weather_refresh_pending = False
         self.weather_worker = WeatherWorker(self.db)
         self.weather_worker.result_ready.connect(self.set_weather_text)
+        self.weather_worker.finished.connect(self.on_weather_finished)
         self.weather_worker.finished.connect(self.weather_worker.deleteLater)
         self.weather_worker.start()
+
+    def on_weather_finished(self):
+        if self.weather_refresh_pending and self.weather_online is not False:
+            self.weather_refresh_pending = False
+            QTimer.singleShot(250, self.fetch_weather)
 
     def setup_network_monitor(self):
         try:
@@ -414,6 +424,7 @@ class DashboardView(QWidget):
         ):
             self.weather_online = True
             self.set_weather_text("Hava durumu güncelleniyor...")
+            self.weather_refresh_pending = True
             self.fetch_weather()
 
     def check_weather_connection(self):
@@ -429,6 +440,7 @@ class DashboardView(QWidget):
             return
 
         self.set_weather_text("Hava durumu güncelleniyor...")
+        self.weather_refresh_pending = True
         self.fetch_weather()
 
     def set_weather_text(self, text):
