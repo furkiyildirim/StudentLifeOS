@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS courses (
     code TEXT NOT NULL,          -- Örn: MATH101
     name TEXT NOT NULL,          -- Örn: Calculus I
     instructor TEXT,
+    instructor_contact TEXT,
     classroom TEXT,
     credit INTEGER DEFAULT 3,
     max_absence INTEGER DEFAULT 4,
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS notes (
 -- Materyaller (PDF, Sunum, Resim referansları)
 CREATE TABLE IF NOT EXISTS materials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     file_name TEXT NOT NULL,
     file_path TEXT NOT NULL,
     file_type TEXT NOT NULL,      -- 'pdf', 'image', 'slide', 'doc'

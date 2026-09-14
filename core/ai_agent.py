@@ -6,13 +6,20 @@ def get_system_prompt(db):
     mem = ""
     try:
         with db.get_connection() as c:
-            c.execute("SELECT title FROM todo_tasks WHERE is_completed=0 LIMIT 3")
-            t = [r["title"] for r in c.fetchall()]
+            t = [r["title"] for r in c.execute("SELECT title FROM todo_tasks WHERE is_completed=0 LIMIT 3").fetchall()]
             if t: mem += f"Bekleyen Görevler: {','.join(t)} | "
             
-            c.execute("SELECT title FROM projects WHERE status='Devam Ediyor' LIMIT 2")
-            p = [r["title"] for r in c.fetchall()]
+            p = [r["title"] for r in c.execute("SELECT title FROM projects WHERE status='Devam Ediyor' LIMIT 2").fetchall()]
             if p: mem += f"Aktif Projeler: {','.join(p)}"
+
+            courses = [
+                f"{r['code']} ({r['credit'] or 0} kredi, {r['instructor'] or 'hoca yok'})"
+                for r in c.execute("""
+                SELECT code, name, credit, instructor
+                FROM courses ORDER BY code LIMIT 8
+            """).fetchall()
+            ]
+            if courses: mem += f" | Dersler: {', '.join(courses)}"
     except: pass
 
     return (
@@ -27,8 +34,7 @@ def get_database_tools(db):
         """Bekleyen görevleri listele."""
         try:
             with db.get_connection() as c:
-                c.execute("SELECT title FROM todo_tasks WHERE is_completed=0")
-                return ",".join([r['title'] for r in c.fetchall()]) or "Yok"
+                return ",".join([r['title'] for r in c.execute("SELECT title FROM todo_tasks WHERE is_completed=0").fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
     def add_todo(title: str) -> str:
@@ -65,8 +71,7 @@ def get_database_tools(db):
         """Takvimi oku. (YYYY-MM-DD)"""
         try:
             with db.get_connection() as c:
-                c.execute("SELECT title, start_time FROM calendar_events WHERE event_date=?", (date,))
-                return ",".join([f"{r['start_time']} {r['title']}" for r in c.fetchall()]) or "Yok"
+                return ",".join([f"{r['start_time']} {r['title']}" for r in c.execute("SELECT title, start_time FROM calendar_events WHERE event_date=?", (date,)).fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
     def add_event(title: str, date: str, time: str) -> str:
@@ -91,8 +96,7 @@ def get_database_tools(db):
         """Not başlıklarını listele."""
         try:
             with db.get_connection() as c:
-                c.execute("SELECT title FROM notes")
-                return ",".join([r['title'] for r in c.fetchall()]) or "Yok"
+                return ",".join([r['title'] for r in c.execute("SELECT title FROM notes").fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
     def add_note(title: str, content: str) -> str:
@@ -118,8 +122,63 @@ def get_database_tools(db):
         try:
             d = int(float(day))
             with db.get_connection() as c:
-                c.execute("SELECT c.code, t.start_time FROM timetable t JOIN courses c ON t.course_id=c.id WHERE t.day_of_week=?", (d,))
-                return ",".join([f"{r['start_time']} {r['code']}" for r in c.fetchall()]) or "Yok"
+                rows = c.execute("""
+                    SELECT c.code, c.name, c.credit, t.start_time, t.end_time,
+                           t.instructor, t.classroom
+                    FROM timetable t
+                    JOIN courses c ON t.course_id = c.id
+                    WHERE t.day_of_week = ?
+                    ORDER BY t.start_time
+                """, (d,))
+                return ", ".join([
+                    f"{r['start_time']}-{r['end_time']} {r['code']} "
+                    f"({r['credit'] or 0} kredi, {r['instructor'] or 'hoca yok'}, "
+                    f"{r['classroom'] or 'derslik yok'})"
+                    for r in rows.fetchall()
+                ]) or "Yok"
+        except Exception as e: return str(e)
+
+    def get_courses() -> str:
+        """Dersleri kredi, hoca ve iletişim bilgileriyle listele."""
+        try:
+            with db.get_connection() as c:
+                rows = c.execute("""
+                    SELECT code, name, credit, instructor, instructor_contact, classroom
+                    FROM courses ORDER BY code
+                """)
+                return ", ".join([
+                    f"{r['code']} - {r['name']} ({r['credit'] or 0} kredi; "
+                    f"hoca: {r['instructor'] or 'yok'}; "
+                    f"iletişim: {r['instructor_contact'] or 'yok'}; "
+                    f"varsayılan derslik: {r['classroom'] or 'yok'})"
+                    for r in rows.fetchall()
+                ]) or "Yok"
+        except Exception as e: return str(e)
+
+    def update_course(code: str, name: str = None, credit: int = None,
+                      instructor: str = None, instructor_contact: str = None,
+                      classroom: str = None) -> str:
+        """Dersin genel bilgilerini güncelle. Çizelge saatlerinin hoca/derslik bilgilerine dokunmaz."""
+        try:
+            updates = []
+            values = []
+            for column, value in (
+                ("name", name), ("credit", credit), ("instructor", instructor),
+                ("instructor_contact", instructor_contact), ("classroom", classroom)
+            ):
+                if value is not None:
+                    updates.append(f"{column} = ?")
+                    values.append(int(float(value)) if column == "credit" else str(value).strip())
+            if not updates:
+                return "Güncellenecek bilgi verilmedi"
+
+            with db.get_connection() as c:
+                values.append(code.strip())
+                cursor = c.execute(f"UPDATE courses SET {', '.join(updates)} WHERE code = ?", values)
+                if cursor.rowcount == 0:
+                    return "Ders bulunamadı"
+                c.commit()
+            return "Ders bilgileri güncellendi"
         except Exception as e: return str(e)
 
     def add_course(code: str, name: str, day: int, time: str) -> str:
@@ -127,8 +186,7 @@ def get_database_tools(db):
         try:
             d = int(float(day))
             with db.get_connection() as c:
-                c.execute("SELECT id FROM courses WHERE code=?", (code,))
-                row = c.fetchone()
+                row = c.execute("SELECT id FROM courses WHERE code=?", (code,)).fetchone()
                 cid = row["id"] if row else c.execute("INSERT INTO courses (code, name, credit, classroom) VALUES (?, ?, 0, '')", (code, name)).lastrowid
                 c.execute("INSERT INTO timetable (course_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, '')", (cid, d, time))
                 c.commit()
@@ -139,11 +197,10 @@ def get_database_tools(db):
         """Belirtilen kodu olan dersi sil."""
         try:
             with db.get_connection() as c:
-                c.execute("SELECT id FROM courses WHERE code=?", (code,))
-                row = c.fetchone()
+                row = c.execute("SELECT id FROM courses WHERE code=?", (code,)).fetchone()
                 if row:
                     cid = row["id"]
-                    c.execute("DELETE FROM timetable WHERE course_id=?", (cid,))
+                    c.execute("UPDATE materials SET course_id=NULL WHERE course_id=?", (cid,))
                     c.execute("DELETE FROM courses WHERE id=?", (cid,))
                     c.commit()
                     return "Silindi"
@@ -155,8 +212,7 @@ def get_database_tools(db):
         try:
             d = int(float(day))
             with db.get_connection() as c:
-                c.execute("SELECT exercise_name FROM workout_exercises WHERE day_of_week=?", (d,))
-                return ",".join([r['exercise_name'] for r in c.fetchall()]) or "Yok"
+                return ",".join([r['exercise_name'] for r in c.execute("SELECT exercise_name FROM workout_exercises WHERE day_of_week=?", (d,)).fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
     def add_workout(day: int, name: str) -> str:
@@ -182,8 +238,7 @@ def get_database_tools(db):
         """Alışkanlıkları listele."""
         try:
             with db.get_connection() as c:
-                c.execute("SELECT title FROM habits")
-                return ",".join([r['title'] for r in c.fetchall()]) or "Yok"
+                return ",".join([r['title'] for r in c.execute("SELECT title FROM habits").fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
     def add_habit(title: str) -> str:
@@ -208,8 +263,7 @@ def get_database_tools(db):
         """Projeleri ve ID'lerini listele."""
         try:
             with db.get_connection() as c:
-                c.execute("SELECT id, title FROM projects")
-                return ",".join([f"ID:{r['id']} {r['title']}" for r in c.fetchall()]) or "Yok"
+                return ",".join([f"ID:{r['id']} {r['title']}" for r in c.execute("SELECT id, title FROM projects").fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
     def add_project(title: str) -> str:
@@ -255,7 +309,7 @@ def get_database_tools(db):
         get_todos, add_todo, complete_todo, delete_todo,
         get_events, add_event, delete_event,
         get_notes, add_note, delete_note,
-        get_schedule, add_course, delete_course,
+        get_schedule, get_courses, update_course, add_course, delete_course,
         get_workouts, add_workout, delete_workout,
         get_habits, add_habit, delete_habit,
         get_projs, add_project, delete_project, add_proj_task, delete_proj_task

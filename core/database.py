@@ -27,17 +27,24 @@ class DatabaseManager:
                 code TEXT NOT NULL UNIQUE,
                 name TEXT NOT NULL,
                 instructor TEXT,
+                instructor_contact TEXT,
                 classroom TEXT,
                 credit INTEGER DEFAULT 3,
                 color_hex TEXT DEFAULT '#3B82F6'
             );
             """)
 
+            course_columns = {
+                row["name"] for row in cur.execute("PRAGMA table_info(courses)")
+            }
+            if "instructor_contact" not in course_columns:
+                cur.execute("ALTER TABLE courses ADD COLUMN instructor_contact TEXT")
+
             # 2. Haftalık Ders Çizelgesi
             cur.execute("""
             CREATE TABLE IF NOT EXISTS timetable (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+                course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
                 day_of_week INTEGER NOT NULL, -- 0: Pzt, 1: Sal, ..., 6: Paz
                 start_time TEXT NOT NULL,     -- '09:00'
                 end_time TEXT NOT NULL,       -- '10:30'

@@ -61,6 +61,8 @@ class PersonalPlanDelegate(QStyledItemDelegate):
 class InteractiveTimetableWidget(QTableWidget):
     slot_moved = Signal(int, int)      # timetable_id, new_day_of_week
     slot_edit = Signal(dict)           # slot_data
+    course_details_requested = Signal(dict)  # slot_data
+    course_delete = Signal(int)        # course_id
     slot_delete = Signal(int)          # timetable_id
 
     def __init__(self, parent=None):
@@ -154,12 +156,18 @@ class InteractiveTimetableWidget(QTableWidget):
             }
         """)
 
+        action_details = menu.addAction("🔎 Ders Detaylarını Göster")
         action_edit = menu.addAction("✏️ Dersi / Saati Düzenle")
+        action_delete_course = menu.addAction("🗑 Dersi Tamamen Sil")
         action_delete = menu.addAction("🗑 Çizelgeden Kaldır")
 
         action = menu.exec(self.viewport().mapToGlobal(pos))
-        if action == action_edit:
+        if action == action_details:
+            self.course_details_requested.emit(data)
+        elif action == action_edit:
             self.slot_edit.emit(data)
+        elif action == action_delete_course:
+            self.course_delete.emit(data["course_id"])
         elif action == action_delete:
             self.slot_delete.emit(data["slot_id"])
 
@@ -169,7 +177,6 @@ class InteractiveTimetableWidget(QTableWidget):
             data = item.data(Qt.UserRole)
             if data and data.get("slot_id"):
                 self.slot_edit.emit(data)
-
 
 # =========================================================================
 # 2. DEĞERLENDİRME & NOT KARTI BİLEŞENİ
@@ -376,6 +383,8 @@ class TimetableView(QWidget):
         # Sinyalleri bağla
         self.table.slot_moved.connect(self.handle_slot_moved)
         self.table.slot_edit.connect(self.dialog_edit_slot)
+        self.table.course_details_requested.connect(self.show_course_details)
+        self.table.course_delete.connect(self.delete_course)
         self.table.slot_delete.connect(self.delete_slot)
 
         lay.addWidget(self.table)
@@ -516,6 +525,163 @@ class TimetableView(QWidget):
             bus.courses_changed.emit()
             bus.item_deleted.emit("Çizelgeden bir ders saati kaldırıldı.")
 
+    def delete_course(self, course_id: int):
+        with self.db.get_connection() as conn:
+            course = conn.execute(
+                "SELECT code, name FROM courses WHERE id = ?", (course_id,)
+            ).fetchone()
+
+        if not course:
+            return
+
+        confirm = QMessageBox.question(
+            self,
+            "Dersi Tamamen Sil",
+            f"'{course['code']} - {course['name']}' dersini tamamen silmek istiyor musunuz?\n\n"
+            "Dersin çizelge ve sınav kayıtları silinir. Bağlı materyaller korunarak genele aktarılır.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        with self.db.get_connection() as conn:
+            conn.execute(
+                "UPDATE materials SET course_id = NULL WHERE course_id = ?",
+                (course_id,)
+            )
+            conn.execute("DELETE FROM courses WHERE id = ?", (course_id,))
+            conn.commit()
+
+        self.load_schedule()
+        bus.courses_changed.emit()
+        bus.assessments_changed.emit()
+        bus.notes_changed.emit()
+        bus.item_deleted.emit(f"'{course['code']}' dersi tamamen silindi.")
+
+    def show_course_details(self, slot_data: dict):
+        with self.db.get_connection() as conn:
+            course = conn.execute("""
+                SELECT code, name, instructor, instructor_contact, classroom, credit
+                FROM courses WHERE id = ?
+            """, (slot_data["course_id"],)).fetchone()
+
+        if not course:
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Ders Detayları - {course['code']}")
+        dlg.resize(360, 300)
+        lay = QVBoxLayout(dlg)
+
+        title = QLabel(f"<b>{course['code']} - {course['name']}</b>")
+        title.setStyleSheet("font-size: 16px; color: #38bdf8;")
+        lay.addWidget(title)
+
+        details = QLabel(
+            f"Kredi: {course['credit'] or 0}\n"
+            f"Dersin hocası: {course['instructor'] or 'Belirtilmemiş'}\n"
+            f"Hocanın iletişimi: {course['instructor_contact'] or 'Belirtilmemiş'}\n\n"
+            f"Bu çizelge saati için hoca: {slot_data['instructor'] or 'Belirtilmemiş'}\n"
+            f"Bu çizelge saati için derslik: {slot_data['classroom'] or 'Belirtilmemiş'}"
+        )
+        details.setWordWrap(True)
+        details.setStyleSheet("font-size: 13px; line-height: 1.5; color: #e4e4e7;")
+        lay.addWidget(details)
+
+        buttons = QHBoxLayout()
+        btn_edit = QPushButton("Düzenle")
+        btn_edit.setObjectName("AccentButton")
+        btn_delete = QPushButton("Dersi Tamamen Sil")
+        btn_delete.setStyleSheet("color: #f43f5e; border: 1px solid #f43f5e; padding: 6px 10px;")
+        btn_close = QPushButton("Kapat")
+        buttons.addWidget(btn_edit)
+        buttons.addWidget(btn_delete)
+        buttons.addWidget(btn_close)
+        lay.addLayout(buttons)
+
+        btn_close.clicked.connect(dlg.reject)
+
+        def edit_course():
+            dlg.accept()
+            self.dialog_edit_course(slot_data["course_id"])
+
+        def delete_course():
+            dlg.reject()
+            self.delete_course(slot_data["course_id"])
+
+        btn_edit.clicked.connect(edit_course)
+        btn_delete.clicked.connect(delete_course)
+        dlg.exec()
+
+    def dialog_edit_course(self, course_id: int):
+        with self.db.get_connection() as conn:
+            course = conn.execute("""
+                SELECT code, name, instructor, instructor_contact, classroom, credit
+                FROM courses WHERE id = ?
+            """, (course_id,)).fetchone()
+
+        if not course:
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Dersi Güncelle - {course['code']}")
+        dlg.resize(360, 360)
+        lay = QVBoxLayout(dlg)
+
+        code_in = QLineEdit(course["code"])
+        name_in = QLineEdit(course["name"])
+        instructor_in = QLineEdit(course["instructor"] or "")
+        contact_in = QLineEdit(course["instructor_contact"] or "")
+        classroom_in = QLineEdit(course["classroom"] or "")
+        credit_in = QSpinBox()
+        credit_in.setRange(1, 10)
+        credit_in.setValue(int(course["credit"] or 3))
+
+        for label, widget in (
+            ("Ders kodu:", code_in),
+            ("Ders adı:", name_in),
+            ("Öğretim görevlisi:", instructor_in),
+            ("Hocanın iletişim bilgileri:", contact_in),
+            ("Derslik / Amfi:", classroom_in),
+        ):
+            lay.addWidget(QLabel(label))
+            lay.addWidget(widget)
+        lay.addWidget(QLabel("Kredi:"))
+        lay.addWidget(credit_in)
+
+        btn_save = QPushButton("Güncelle")
+        btn_save.setObjectName("AccentButton")
+        lay.addWidget(btn_save)
+
+        def save():
+            code = code_in.text().strip()
+            name = name_in.text().strip()
+            if not code or not name:
+                QMessageBox.warning(dlg, "Hata", "Ders kodu ve adı boş bırakılamaz.")
+                return
+            try:
+                with self.db.get_connection() as conn:
+                    conn.execute("""
+                        UPDATE courses
+                        SET code = ?, name = ?, instructor = ?, instructor_contact = ?,
+                            classroom = ?, credit = ?
+                        WHERE id = ?
+                    """, (
+                        code, name, instructor_in.text().strip(), contact_in.text().strip(),
+                        classroom_in.text().strip(), credit_in.value(), course_id
+                    ))
+                    conn.commit()
+                dlg.accept()
+                self.load_schedule()
+                bus.courses_changed.emit()
+                bus.item_saved.emit(f"'{code}' ders bilgileri güncellendi.")
+            except Exception as exc:
+                QMessageBox.critical(dlg, "Hata", f"Ders güncellenemedi: {exc}")
+
+        btn_save.clicked.connect(save)
+        dlg.exec()
+
     def dialog_add_course(self):
         dlg = QDialog(self)
         dlg.setWindowTitle("Yeni Ders Tanımla")
@@ -525,6 +691,7 @@ class TimetableView(QWidget):
         code_in = QLineEdit(); code_in.setPlaceholderText("Ders Kodu (Örn: MATH101)")
         name_in = QLineEdit(); name_in.setPlaceholderText("Ders Adı (Örn: Calculus I)")
         inst_in = QLineEdit(); inst_in.setPlaceholderText("Öğretim Üyesi")
+        contact_in = QLineEdit(); contact_in.setPlaceholderText("Hocanın iletişim bilgileri")
         room_in = QLineEdit(); room_in.setPlaceholderText("Derslik / Amfi")
         cred_in = QSpinBox(); cred_in.setValue(3); cred_in.setPrefix("Kredi: ")
 
@@ -558,6 +725,7 @@ class TimetableView(QWidget):
         lay.addWidget(code_in)
         lay.addWidget(name_in)
         lay.addWidget(inst_in)
+        lay.addWidget(contact_in)
         lay.addWidget(room_in)
         lay.addWidget(cred_in)
         lay.addWidget(QLabel("Renk Rozeti:"))
@@ -576,10 +744,10 @@ class TimetableView(QWidget):
                 with self.db.get_connection() as conn:
                     cur = conn.cursor()
                     cur.execute("""
-                        INSERT INTO courses (code, name, instructor, classroom, credit, color_hex) 
-                        VALUES (?, ?, ?, ?, ?, ?)
+                                                INSERT INTO courses (code, name, instructor, instructor_contact, classroom, credit, color_hex)
+                                                VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (code_in.text().strip(), name_in.text().strip(), inst_in.text().strip(),
-                          room_in.text().strip(), cred_in.value(), color_box.currentData()))
+                                                    contact_in.text().strip(), room_in.text().strip(), cred_in.value(), color_box.currentData()))
                     conn.commit()
                 dlg.accept()
                 self.load_schedule()

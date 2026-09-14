@@ -539,6 +539,8 @@ class AIChatWindow(QFrame):
             bus.habits_changed.emit()
             bus.workouts_changed.emit()
             bus.courses_changed.emit()
+            bus.assessments_changed.emit()
+            bus.notes_changed.emit()
         except Exception: pass
         
         self.input_field.setEnabled(True)
