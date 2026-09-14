@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local application data
+student_life.db
+student_life.db-*
+vault_storage/
+
+# Large local model files are distributed separately.
+resources/models/*.gguf
+
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# Local/editor files
+.env
+.vscode/
+*.log

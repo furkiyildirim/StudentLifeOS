@@ -1,0 +1,18 @@
+PySide6>=6.5.0
+
+google-generativeai>=0.3.0
+openai>=1.0.0
+anthropic>=0.18.0
+
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python>=0.2.0
+
+requests>=2.31.0
+mutagen>=1.47.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+xlrd>=2.0.1
+python-docx>=1.1.0
+python-pptx>=0.6.23
+pyinstaller>=6.0.0
+
