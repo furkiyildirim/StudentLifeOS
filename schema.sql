@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS timetable (
     course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
     day_of_week INTEGER NOT NULL, -- 0: Pazartesi, ..., 6: Pazar
     start_time TEXT NOT NULL,     -- '09:30'
-    end_time TEXT NOT NULL        -- '11:20'
+    end_time TEXT NOT NULL,       -- '11:20'
+    instructor TEXT,
+    classroom TEXT
 );
 
 -- Sınavlar ve Değerlendirmeler

@@ -40,8 +40,28 @@ class DatabaseManager:
                 course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
                 day_of_week INTEGER NOT NULL, -- 0: Pzt, 1: Sal, ..., 6: Paz
                 start_time TEXT NOT NULL,     -- '09:00'
-                end_time TEXT NOT NULL        -- '10:30'
+                end_time TEXT NOT NULL,       -- '10:30'
+                instructor TEXT,
+                classroom TEXT
             );
+            """)
+
+            timetable_columns = {
+                row["name"] for row in cur.execute("PRAGMA table_info(timetable)")
+            }
+            if "instructor" not in timetable_columns:
+                cur.execute("ALTER TABLE timetable ADD COLUMN instructor TEXT")
+            if "classroom" not in timetable_columns:
+                cur.execute("ALTER TABLE timetable ADD COLUMN classroom TEXT")
+            cur.execute("""
+                UPDATE timetable
+                SET instructor = COALESCE(instructor, (
+                    SELECT instructor FROM courses WHERE courses.id = timetable.course_id
+                )),
+                    classroom = COALESCE(classroom, (
+                        SELECT classroom FROM courses WHERE courses.id = timetable.course_id
+                    ))
+                WHERE instructor IS NULL OR classroom IS NULL
             """)
 
             # 3. Sınavlar ve Notlar

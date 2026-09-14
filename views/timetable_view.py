@@ -2,15 +2,58 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QPushButton, QDialog, QLineEdit, QComboBox,
     QSpinBox, QDoubleSpinBox, QMessageBox, QHeaderView, QTabWidget,
-    QFrame, QScrollArea, QAbstractItemView, QMenu
+    QFrame, QScrollArea, QAbstractItemView, QMenu, QStyledItemDelegate, QStyle
 )
 from PySide6.QtGui import QCursor, QColor, QDrag, QBrush
-from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice
+from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer
 from PySide6.QtGui import QCursor, QColor, QDrag
 from core.sound import play_action_sound
 from core.events import bus
 
 DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+
+
+class TimetableColorDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        background = index.data(Qt.BackgroundRole)
+        is_selected = bool(option.state & QStyle.State_Selected)
+        if not isinstance(background, QBrush):
+            super().paint(painter, option, index)
+            return
+
+        painter.save()
+        cell_rect = option.rect.adjusted(4, 4, -4, -4)
+        painter.fillRect(cell_rect, background)
+
+        foreground = index.data(Qt.ForegroundRole)
+        painter.setPen(foreground.color() if isinstance(foreground, QBrush) else QColor("#ffffff"))
+        font = painter.font()
+        font.setPointSize(9)
+        painter.setFont(font)
+        painter.drawText(
+            cell_rect.adjusted(3, 3, -3, -3),
+            Qt.AlignCenter | Qt.TextWordWrap,
+            str(index.data(Qt.DisplayRole) or "")
+        )
+
+        if is_selected:
+            painter.save()
+            painter.setPen(QColor("#38bdf8"))
+            painter.drawRect(cell_rect.adjusted(1, 1, -2, -2))
+            painter.restore()
+        painter.restore()
+
+class PersonalPlanDelegate(QStyledItemDelegate):
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+
+        def clear_model_value(text):
+            if not text:
+                index.model().setData(index, "", Qt.EditRole)
+
+        editor.textChanged.connect(clear_model_value)
+        return editor
+
 
 # =========================================================================
 # 1. SÜRÜKLE - BIRAK VE SAĞ TIK DESTEKLİ TABLO BİLEŞENİ
@@ -307,6 +350,7 @@ class TimetableView(QWidget):
 
         # Sürükle-Bırak Destekli Haftalık Grid
         self.table = InteractiveTimetableWidget()
+        self.table.setItemDelegate(TimetableColorDelegate(self.table))
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(DAYS_TR)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -324,7 +368,7 @@ class TimetableView(QWidget):
                 border-radius: 6px;
             }
             QTableWidget::item:selected {
-                background-color: #1f1b18;
+                background-color: transparent;
                 border: 1px solid #38bdf8;
             }
         """)
@@ -341,7 +385,7 @@ class TimetableView(QWidget):
     def load_schedule(self):
         self.table.setRowCount(8)
         for r in range(8):
-            self.table.setRowHeight(r, 72)
+            self.table.setRowHeight(r, 92)
             for c in range(7):
                 item = QTableWidgetItem("")
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
@@ -350,7 +394,8 @@ class TimetableView(QWidget):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                SELECT t.id, t.day_of_week, t.start_time, t.end_time, c.code, c.name, c.classroom, c.color_hex, t.course_id
+                  SELECT t.id, t.day_of_week, t.start_time, t.end_time,
+                      c.code, c.name, t.instructor, t.classroom, c.color_hex, t.course_id
                 FROM timetable t
                 JOIN courses c ON t.course_id = c.id
                 ORDER BY t.start_time ASC
@@ -363,18 +408,19 @@ class TimetableView(QWidget):
             row_idx = day_counters[dow]
             if row_idx < 8:
                 c_color = s["color_hex"] if s["color_hex"] else "#38bdf8"
-                text = f"{s['code']}\n{s['start_time']} - {s['end_time']}\n({s['classroom']})"
+                text = f"{s['code']}\n{s['start_time']} - {s['end_time']}\n({s['classroom'] or 'Amfi belirtilmedi'})\n{s['instructor'] or 'Öğretim görevlisi belirtilmedi'}"
                 
-                # Rengi oluştur ve görünürlüğünü (alpha) artır!
+                # Ders rengini takvimdeki rozetler gibi hücre arka planına uygula.
                 bg_color = QColor(c_color)
-                bg_color.setAlpha(140) # 60 çok düşüktü, 140 yaparak belirginleştirdik
+                if not bg_color.isValid():
+                    bg_color = QColor("#38bdf8")
+                bg_color.setAlpha(230)
                 
                 item = QTableWidgetItem(text)
                 item.setTextAlignment(Qt.AlignCenter)
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled)
                 item.setForeground(QColor("#ffffff"))
                 
-                # QBrush kullanarak arka plan boyamasını garantiye alıyoruz
                 item.setBackground(QBrush(bg_color))
                 
                 # Sürükleme ve sağ tık için slot verisini sakla
@@ -386,7 +432,8 @@ class TimetableView(QWidget):
                     "day_of_week": s["day_of_week"],
                     "start_time": s["start_time"],
                     "end_time": s["end_time"],
-                    "classroom": s["classroom"]
+                    "classroom": s["classroom"] or "",
+                    "instructor": s["instructor"] or ""
                 })
                 
                 self.table.setItem(row_idx, dow, item)
@@ -420,6 +467,7 @@ class TimetableView(QWidget):
         start_in = QLineEdit(slot_data["start_time"])
         end_in = QLineEdit(slot_data["end_time"])
         room_in = QLineEdit(slot_data["classroom"])
+        instructor_in = QLineEdit(slot_data["instructor"])
 
         lay.addWidget(QLabel("Gün:"))
         lay.addWidget(day_box)
@@ -429,6 +477,8 @@ class TimetableView(QWidget):
         lay.addWidget(end_in)
         lay.addWidget(QLabel("Derslik / Amfi:"))
         lay.addWidget(room_in)
+        lay.addWidget(QLabel("Öğretim Görevlisi:"))
+        lay.addWidget(instructor_in)
 
         btn_save = QPushButton("Güncelle")
         btn_save.setObjectName("AccentButton")
@@ -440,12 +490,11 @@ class TimetableView(QWidget):
                 cur = conn.cursor()
                 cur.execute("""
                     UPDATE timetable 
-                    SET day_of_week = ?, start_time = ?, end_time = ?
+                    SET day_of_week = ?, start_time = ?, end_time = ?,
+                        classroom = ?, instructor = ?
                     WHERE id = ?
-                """, (day_box.currentData(), start_in.text().strip(), end_in.text().strip(), slot_data["slot_id"]))
-                
-                # Derslik bilgisi courses tablosunda güncellenir
-                cur.execute("UPDATE courses SET classroom = ? WHERE id = ?", (room_in.text().strip(), slot_data["course_id"]))
+                """, (day_box.currentData(), start_in.text().strip(), end_in.text().strip(),
+                      room_in.text().strip(), instructor_in.text().strip(), slot_data["slot_id"]))
                 conn.commit()
             play_action_sound("save")
             dlg.accept()
@@ -545,7 +594,7 @@ class TimetableView(QWidget):
     def dialog_add_schedule(self):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, code, name FROM courses")
+            cur.execute("SELECT id, code, name, instructor, classroom FROM courses")
             courses = cur.fetchall()
 
         if not courses:
@@ -554,7 +603,7 @@ class TimetableView(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Çizelgeye Ders Saati Ekle")
-        dlg.resize(320, 240)
+        dlg.resize(320, 320)
         lay = QVBoxLayout(dlg)
 
         c_box = QComboBox()
@@ -567,6 +616,16 @@ class TimetableView(QWidget):
 
         start_in = QLineEdit("09:30")
         end_in = QLineEdit("11:20")
+        instructor_in = QLineEdit()
+        room_in = QLineEdit()
+
+        def load_course_defaults(index):
+            course = courses[index]
+            instructor_in.setText(course["instructor"] or "")
+            room_in.setText(course["classroom"] or "")
+
+        c_box.currentIndexChanged.connect(load_course_defaults)
+        load_course_defaults(0)
 
         lay.addWidget(QLabel("Ders:"))
         lay.addWidget(c_box)
@@ -575,6 +634,10 @@ class TimetableView(QWidget):
         lay.addWidget(QLabel("Saat Aralığı:"))
         lay.addWidget(start_in)
         lay.addWidget(end_in)
+        lay.addWidget(QLabel("Derslik / Amfi:"))
+        lay.addWidget(room_in)
+        lay.addWidget(QLabel("Öğretim Görevlisi:"))
+        lay.addWidget(instructor_in)
 
         btn_save = QPushButton("Ekle")
         btn_save.setObjectName("AccentButton")
@@ -584,8 +647,12 @@ class TimetableView(QWidget):
         def save():
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
-                cur.execute("INSERT INTO timetable (course_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?)",
-                            (c_box.currentData(), day_box.currentData(), start_in.text().strip(), end_in.text().strip()))
+                cur.execute("""
+                    INSERT INTO timetable
+                        (course_id, day_of_week, start_time, end_time, instructor, classroom)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (c_box.currentData(), day_box.currentData(), start_in.text().strip(),
+                      end_in.text().strip(), instructor_in.text().strip(), room_in.text().strip()))
                 conn.commit()
             play_action_sound("save")
             dlg.accept()
@@ -805,20 +872,35 @@ class TimetableView(QWidget):
 
         # Tablo satır sayısını tüm gün için 24 yapıyoruz
         self.plan_table = QTableWidget(24, 7)
+        self.plan_table.setItemDelegate(PersonalPlanDelegate(self.plan_table))
         self.plan_table.setHorizontalHeaderLabels(DAYS_TR)
+        self.personal_plan_loading = False
+        self.personal_plan_save_timer = QTimer(self)
+        self.personal_plan_save_timer.setSingleShot(True)
+        self.personal_plan_save_timer.timeout.connect(
+            lambda: self.save_personal_plan(notify=False)
+        )
         
         # 00:00'dan 23:00'a kadar tüm saatler (gece 24 = 00:00)
         hours = [f"{h:02d}:00" for h in range(24)]
         self.plan_table.setVerticalHeaderLabels(hours)
         
         self.plan_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        # 24 satır ekrana sığmayacağı için dikey esnemeyi iptal edip standart boyut veriyoruz
-        self.plan_table.verticalHeader().setDefaultSectionSize(45) 
+        self.plan_table.verticalHeader().setDefaultSectionSize(58)
+        self.plan_table.setWordWrap(True)
+        self.plan_table.setTextElideMode(Qt.ElideRight)
+        self.plan_table.setEditTriggers(
+            QAbstractItemView.DoubleClicked |
+            QAbstractItemView.EditKeyPressed |
+            QAbstractItemView.SelectedClicked
+        )
+        self.plan_table.itemChanged.connect(self.refresh_personal_plan_cell)
+        self.plan_table.itemChanged.connect(self.schedule_personal_plan_save)
         
         self.plan_table.setStyleSheet("""
             QTableWidget { background-color: #141210; color: #f4f4f5; gridline-color: #292524; border: 1px solid #292524; border-radius: 8px; }
             QHeaderView::section { background-color: #1c1917; color: #a1a1aa; padding: 4px; border: 1px solid #292524; font-weight: bold; }
-            QTableWidget::item { padding: 4px; }
+            QTableWidget::item { padding: 6px; }
             QTableWidget::item:selected { background-color: #1f1b18; border: 1px solid #38bdf8; }
         """)
         lay.addWidget(self.plan_table)
@@ -826,7 +908,31 @@ class TimetableView(QWidget):
         self.load_personal_plan()
         return tab
 
+    def refresh_personal_plan_cell(self, item):
+        if item.text().strip():
+            item.setToolTip(item.text())
+        else:
+            item.setToolTip("")
+            row = item.row()
+            column = item.column()
+
+            def clear_empty_cell():
+                current_item = self.plan_table.item(row, column)
+                if current_item is item and not current_item.text().strip():
+                    self.plan_table.takeItem(row, column)
+                    self.plan_table.clearSelection()
+                    self.plan_table.setCurrentCell(-1, -1)
+                    self.plan_table.viewport().repaint()
+
+            QTimer.singleShot(0, clear_empty_cell)
+        self.plan_table.viewport().repaint()
+
+    def schedule_personal_plan_save(self, item):
+        if not self.personal_plan_loading:
+            self.personal_plan_save_timer.start(500)
+
     def load_personal_plan(self):
+        self.personal_plan_loading = True
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             # Tablo yoksa otomatik oluşturur
@@ -841,9 +947,12 @@ class TimetableView(QWidget):
             cur.execute("SELECT day_col, hour_row, content FROM personal_plan")
             for row in cur.fetchall():
                 item = QTableWidgetItem(row["content"])
+                item.setTextAlignment(Qt.AlignLeft | Qt.AlignTop)
+                item.setToolTip(row["content"])
                 self.plan_table.setItem(row["hour_row"], row["day_col"], item)
+            self.personal_plan_loading = False
 
-    def save_personal_plan(self):
+    def save_personal_plan(self, notify=True):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM personal_plan")
@@ -856,9 +965,17 @@ class TimetableView(QWidget):
                         cur.execute("INSERT INTO personal_plan (day_col, hour_row, content) VALUES (?, ?, ?)", 
                                     (c, r, item.text().strip()))
             conn.commit()
+
+        self.personal_plan_loading = True
+        self.plan_table.clearContents()
+        self.load_personal_plan()
+        self.plan_table.clearSelection()
+        self.plan_table.setCurrentCell(-1, -1)
+        self.plan_table.viewport().repaint()
             
         try:
             play_action_sound("save")
         except Exception:
             pass
-        bus.item_saved.emit("Kişisel plan başarıyla güncellendi.")
+        if notify:
+            bus.item_saved.emit("Kişisel plan başarıyla güncellendi.")

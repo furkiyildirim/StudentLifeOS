@@ -742,7 +742,8 @@ class DashboardView(QWidget):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                SELECT c.code, c.name, c.classroom, t.start_time, t.end_time, c.color_hex 
+                  SELECT c.code, c.name, COALESCE(t.classroom, c.classroom) AS classroom,
+                      t.start_time, t.end_time, c.color_hex
                 FROM timetable t 
                 JOIN courses c ON t.course_id = c.id 
                 WHERE t.day_of_week = ?

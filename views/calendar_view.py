@@ -74,8 +74,8 @@ class CalendarDayCell(QFrame):
             badge = QLabel(f"• {ev['title']}")
             badge.setFixedHeight(18)
             badge.setStyleSheet(f"""
-                background-color: {ev['color']}22;
-                color: {ev['color']};
+                background-color: #292524;
+                color: #f4f4f5;
                 border-left: 2px solid {ev['color']};
                 border-radius: 3px;
                 font-size: 10px;
@@ -401,7 +401,8 @@ class CalendarView(QWidget):
             cur = conn.cursor()
             
             cur.execute("""
-                SELECT t.id, c.code, c.name, c.classroom, t.start_time, t.end_time, c.color_hex
+                  SELECT t.id, c.code, c.name, COALESCE(t.classroom, c.classroom) AS classroom,
+                      t.start_time, t.end_time, c.color_hex
                 FROM timetable t
                 JOIN courses c ON t.course_id = c.id
                 WHERE t.day_of_week = ?

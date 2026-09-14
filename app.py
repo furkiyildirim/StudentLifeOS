@@ -979,7 +979,7 @@ class MainWindow(QMainWindow):
 
             if notify_classes:
                 cur.execute("""
-                    SELECT c.code, c.name, t.start_time, c.classroom 
+                    SELECT c.code, c.name, t.start_time, COALESCE(t.classroom, c.classroom) AS classroom
                     FROM timetable t 
                     JOIN courses c ON t.course_id = c.id 
                     WHERE t.day_of_week = ?
