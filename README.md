@@ -86,10 +86,7 @@ Uygulamanin ekran goruntuleri `images/` klasorunden:
 
 ![AI Asistani](images/ai-assistant.png)
 
-Yeni bir ekran goruntusu eklemek icin dosyayi `images/` klasorune koyup README'ye su formatta bir satir ekleyin:
-
-```markdown
-![Gorsel aciklamasi](images/dosya-adi.png)
+images/dosya-adi.png)
 ```
 
 ## Gereksinimler
