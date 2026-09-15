@@ -1,5 +1,11 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from core.events import bus
+
+
+def _emit_changed(*signals):
+    for signal in signals:
+        signal.emit()
 
 def get_system_prompt(db):
     now = datetime.now()
@@ -26,7 +32,10 @@ def get_system_prompt(db):
         "Sen Student Life OS'in entegre zeki asistanısın"
         f"Tarih: {now.strftime('%Y-%m-%d %A')}\n"
         f"Hafıza: {mem}\n"
-        "Yanıtlarını gereksiz uzatmadan, net ve arkadaşça ver. Sohbet edebilirsin ancak veritabanı araçlarını (tools) kullanman gerekirse mutlaka kullan."
+        "Yanıtlarını gereksiz uzatmadan, net ve arkadaşça ver. Kullanıcı açıkça istediğinde veya işlem veritabanını değiştirecekse ilgili aracı mutlaka kullan. "
+        "To-do, kişisel plan, ders, sınav, alışkanlık, antrenman, not ve proje kayıtlarını oluşturabilir, güncelleyebilir, tamamlayabilir ve silebilirsin. "
+        "Projelerde durum değiştirme, proje tamamlama ve alt görev tamamlama işlemlerini de yapabilirsin. "
+        "Silme veya büyük değişikliklerde hangi kaydı etkileyeceğini doğrula; kullanıcı istemeden kayıt silme."
     )
 
 def get_database_tools(db):
@@ -46,6 +55,7 @@ def get_database_tools(db):
                 except:
                     c.execute("INSERT INTO todo_tasks (title, is_completed) VALUES (?, 0)", (title,))
                 c.commit()
+            _emit_changed(bus.todo_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -55,6 +65,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("UPDATE todo_tasks SET is_completed=1 WHERE title LIKE ?", (f"%{title}%",))
                 c.commit()
+            _emit_changed(bus.todo_changed)
             return "Tamamlandı"
         except Exception as e: return str(e)
 
@@ -64,6 +75,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("DELETE FROM todo_tasks WHERE title LIKE ?", (f"%{title}%",))
                 c.commit()
+            _emit_changed(bus.todo_changed)
             return "Silindi"
         except Exception as e: return str(e)
 
@@ -80,6 +92,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("INSERT INTO calendar_events (title, event_date, start_time, end_time, category, is_completed) VALUES (?, ?, ?, '', 'Genel', 0)", (title, date, time))
                 c.commit()
+            _emit_changed(bus.calendar_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -89,8 +102,43 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("DELETE FROM calendar_events WHERE title LIKE ?", (f"%{title}%",))
                 c.commit()
+            _emit_changed(bus.calendar_changed)
             return "Silindi"
         except Exception as e: return str(e)
+
+    def update_event(title: str, new_title: str = None, date: str = None,
+                     time: str = None, category: str = None,
+                     is_completed: bool = None) -> str:
+        """Kişisel planı başlığına göre güncelle. Tarih YYYY-MM-DD, saat HH:MM olabilir."""
+        try:
+            updates = []
+            values = []
+            for column, value in (
+                ("title", new_title), ("event_date", date), ("start_time", time),
+                ("category", category), ("is_completed", is_completed)
+            ):
+                if value is not None:
+                    updates.append(f"{column} = ?")
+                    values.append(int(value) if column == "is_completed" else str(value).strip())
+            if not updates:
+                return "Güncellenecek bilgi verilmedi"
+
+            with db.get_connection() as c:
+                values.append(f"%{title}%")
+                cursor = c.execute(
+                    f"UPDATE calendar_events SET {', '.join(updates)} WHERE title LIKE ?",
+                    values,
+                )
+                c.commit()
+            if cursor.rowcount == 0:
+                return "Plan bulunamadı"
+            _emit_changed(bus.calendar_changed)
+            return f"{cursor.rowcount} plan güncellendi"
+        except Exception as e: return str(e)
+
+    def complete_event(title: str) -> str:
+        """Kişisel planı tamamlandı olarak işaretle."""
+        return update_event(title, is_completed=True)
 
     def get_notes() -> str:
         """Not başlıklarını listele."""
@@ -105,6 +153,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("INSERT INTO notes (title, content) VALUES (?, ?)", (title, content))
                 c.commit()
+            _emit_changed(bus.notes_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -114,6 +163,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("DELETE FROM notes WHERE title LIKE ?", (f"%{title}%",))
                 c.commit()
+            _emit_changed(bus.notes_changed)
             return "Silindi"
         except Exception as e: return str(e)
 
@@ -178,6 +228,7 @@ def get_database_tools(db):
                 if cursor.rowcount == 0:
                     return "Ders bulunamadı"
                 c.commit()
+            _emit_changed(bus.courses_changed)
             return "Ders bilgileri güncellendi"
         except Exception as e: return str(e)
 
@@ -190,6 +241,7 @@ def get_database_tools(db):
                 cid = row["id"] if row else c.execute("INSERT INTO courses (code, name, credit, classroom) VALUES (?, ?, 0, '')", (code, name)).lastrowid
                 c.execute("INSERT INTO timetable (course_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, '')", (cid, d, time))
                 c.commit()
+            _emit_changed(bus.courses_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -203,8 +255,76 @@ def get_database_tools(db):
                     c.execute("UPDATE materials SET course_id=NULL WHERE course_id=?", (cid,))
                     c.execute("DELETE FROM courses WHERE id=?", (cid,))
                     c.commit()
+                    _emit_changed(bus.courses_changed)
                     return "Silindi"
                 return "Bulunamadı"
+        except Exception as e: return str(e)
+
+    def get_assessments() -> str:
+        """Sınav ve değerlendirmeleri ders adı, tarih ve not bilgisiyle listele."""
+        try:
+            with db.get_connection() as c:
+                rows = c.execute("""
+                    SELECT a.id, a.title, a.weight, a.score, a.due_date, c.code
+                    FROM assessments a JOIN courses c ON c.id = a.course_id
+                    ORDER BY a.due_date
+                """).fetchall()
+            return ", ".join(
+                f"ID:{r['id']} {r['code']} {r['title']} ({r['due_date']}, %{r['weight']}, not:{r['score'] if r['score'] is not None else 'yok'})"
+                for r in rows
+            ) or "Yok"
+        except Exception as e: return str(e)
+
+    def add_assessment(course_code: str, title: str, due_date: str,
+                       weight: float = 0, score: float = None) -> str:
+        """Derse sınav/değerlendirme ekle. due_date YYYY-MM-DD HH:MM olmalı."""
+        try:
+            with db.get_connection() as c:
+                course = c.execute("SELECT id FROM courses WHERE code = ?", (course_code.strip(),)).fetchone()
+                if not course:
+                    return "Ders bulunamadı"
+                c.execute(
+                    "INSERT INTO assessments (course_id, title, weight, score, due_date) VALUES (?, ?, ?, ?, ?)",
+                    (course["id"], title.strip(), float(weight), score, due_date.strip()),
+                )
+                c.commit()
+            _emit_changed(bus.assessments_changed)
+            return "Eklendi"
+        except Exception as e: return str(e)
+
+    def update_assessment(assessment_id: int, title: str = None,
+                          due_date: str = None, weight: float = None,
+                          score: float = None) -> str:
+        """Sınav/değerlendirme kaydını ID ile güncelle."""
+        try:
+            updates = []
+            values = []
+            for column, value in (("title", title), ("due_date", due_date), ("weight", weight), ("score", score)):
+                if value is not None:
+                    updates.append(f"{column} = ?")
+                    values.append(float(value) if column in ("weight", "score") else str(value).strip())
+            if not updates:
+                return "Güncellenecek bilgi verilmedi"
+            values.append(int(float(assessment_id)))
+            with db.get_connection() as c:
+                cursor = c.execute(f"UPDATE assessments SET {', '.join(updates)} WHERE id = ?", values)
+                c.commit()
+            if cursor.rowcount == 0:
+                return "Değerlendirme bulunamadı"
+            _emit_changed(bus.assessments_changed)
+            return "Değerlendirme güncellendi"
+        except Exception as e: return str(e)
+
+    def delete_assessment(assessment_id: int) -> str:
+        """Sınav/değerlendirmeyi ID ile sil."""
+        try:
+            with db.get_connection() as c:
+                cursor = c.execute("DELETE FROM assessments WHERE id = ?", (int(float(assessment_id)),))
+                c.commit()
+            if cursor.rowcount == 0:
+                return "Değerlendirme bulunamadı"
+            _emit_changed(bus.assessments_changed)
+            return "Silindi"
         except Exception as e: return str(e)
 
     def get_workouts(day: int) -> str:
@@ -222,6 +342,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("INSERT INTO workout_exercises (day_of_week, exercise_name, sets, reps) VALUES (?, ?, '3', '12')", (d, name))
                 c.commit()
+            _emit_changed(bus.workouts_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -231,6 +352,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("DELETE FROM workout_exercises WHERE exercise_name LIKE ?", (f"%{name}%",))
                 c.commit()
+            _emit_changed(bus.workouts_changed)
             return "Silindi"
         except Exception as e: return str(e)
 
@@ -247,6 +369,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("INSERT INTO habits (title) VALUES (?)", (title,))
                 c.commit()
+            _emit_changed(bus.habits_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -256,6 +379,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("DELETE FROM habits WHERE title LIKE ?", (f"%{title}%",))
                 c.commit()
+            _emit_changed(bus.habits_changed)
             return "Silindi"
         except Exception as e: return str(e)
 
@@ -266,13 +390,42 @@ def get_database_tools(db):
                 return ",".join([f"ID:{r['id']} {r['title']}" for r in c.execute("SELECT id, title FROM projects").fetchall()]) or "Yok"
         except Exception as e: return str(e)
 
-    def add_project(title: str) -> str:
-        """Proje oluştur."""
+    def get_project(pid: int) -> str:
+        """Projenin ayrıntılarını ve alt görevlerini getir."""
+        try:
+            p = int(float(pid))
+            with db.get_connection() as c:
+                project = c.execute("SELECT * FROM projects WHERE id = ?", (p,)).fetchone()
+                if not project:
+                    return "Proje bulunamadı"
+                tasks = c.execute(
+                    "SELECT id, title, is_completed FROM project_tasks WHERE project_id = ? ORDER BY id",
+                    (p,),
+                ).fetchall()
+            task_text = ", ".join(
+                f"ID:{t['id']} {t['title']} ({'tamamlandı' if t['is_completed'] else 'bekliyor'})"
+                for t in tasks
+            ) or "Yok"
+            return (
+                f"ID:{project['id']} | {project['title']} | kategori:{project['category']} | "
+                f"durum:{project['status']} | bitiş:{project['end_date']} | not:{project['notes'] or 'yok'} | "
+                f"alt görevler:{task_text}"
+            )
+        except Exception as e: return str(e)
+
+    def add_project(title: str, category: str = "Genel", status: str = "Devam Ediyor",
+                    end_date: str = None, notes: str = "") -> str:
+        """Proje oluştur. end_date YYYY-MM-DD olmalı."""
         try:
             now = datetime.now().strftime("%Y-%m-%d")
+            end_date = end_date or (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
             with db.get_connection() as c:
-                c.execute("INSERT INTO projects (title, category, status, start_date, end_date, notes) VALUES (?, 'Genel', 'Devam Ediyor', ?, '2026-12-31', '')", (title, now))
+                c.execute(
+                    "INSERT INTO projects (title, category, status, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?)",
+                    (title.strip(), category.strip(), status.strip(), now, end_date, notes.strip()),
+                )
                 c.commit()
+            _emit_changed(bus.projects_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -284,6 +437,7 @@ def get_database_tools(db):
                 c.execute("DELETE FROM project_tasks WHERE project_id=?", (p,))
                 c.execute("DELETE FROM projects WHERE id=?", (p,))
                 c.commit()
+            _emit_changed(bus.projects_changed)
             return "Silindi"
         except Exception as e: return str(e)
 
@@ -293,6 +447,7 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("INSERT INTO project_tasks (project_id, title, is_completed) VALUES (?, ?, 0)", (int(float(pid)), title))
                 c.commit()
+            _emit_changed(bus.projects_changed)
             return "Eklendi"
         except Exception as e: return str(e)
 
@@ -302,15 +457,61 @@ def get_database_tools(db):
             with db.get_connection() as c:
                 c.execute("DELETE FROM project_tasks WHERE title LIKE ?", (f"%{title}%",))
                 c.commit()
+            _emit_changed(bus.projects_changed)
             return "Silindi"
+        except Exception as e: return str(e)
+
+    def update_project(pid: int, title: str = None, category: str = None,
+                       status: str = None, end_date: str = None,
+                       notes: str = None) -> str:
+        """Projeyi güncelle. Durum: Planlanıyor, Devam Ediyor veya Tamamlandı."""
+        try:
+            updates = []
+            values = []
+            for column, value in (
+                ("title", title), ("category", category), ("status", status),
+                ("end_date", end_date), ("notes", notes)
+            ):
+                if value is not None:
+                    updates.append(f"{column} = ?")
+                    values.append(str(value).strip())
+            if not updates:
+                return "Güncellenecek bilgi verilmedi"
+            p = int(float(pid))
+            with db.get_connection() as c:
+                values.append(p)
+                cursor = c.execute(f"UPDATE projects SET {', '.join(updates)} WHERE id = ?", values)
+                c.commit()
+            if cursor.rowcount == 0:
+                return "Proje bulunamadı"
+            _emit_changed(bus.projects_changed)
+            return "Proje güncellendi"
+        except Exception as e: return str(e)
+
+    def complete_project(pid: int) -> str:
+        """Projeyi tamamlandı durumuna getir."""
+        return update_project(pid, status="Tamamlandı")
+
+    def complete_proj_task(task_id: int) -> str:
+        """Proje alt görevini ID ile tamamla."""
+        try:
+            with db.get_connection() as c:
+                cursor = c.execute("UPDATE project_tasks SET is_completed = 1 WHERE id = ?", (int(float(task_id)),))
+                c.commit()
+            if cursor.rowcount == 0:
+                return "Alt görev bulunamadı"
+            _emit_changed(bus.projects_changed)
+            return "Alt görev tamamlandı"
         except Exception as e: return str(e)
 
     return [
         get_todos, add_todo, complete_todo, delete_todo,
-        get_events, add_event, delete_event,
+        get_events, add_event, update_event, complete_event, delete_event,
         get_notes, add_note, delete_note,
         get_schedule, get_courses, update_course, add_course, delete_course,
+        get_assessments, add_assessment, update_assessment, delete_assessment,
         get_workouts, add_workout, delete_workout,
         get_habits, add_habit, delete_habit,
-        get_projs, add_project, delete_project, add_proj_task, delete_proj_task
+        get_projs, get_project, add_project, update_project, complete_project,
+        delete_project, add_proj_task, complete_proj_task, delete_proj_task
     ]

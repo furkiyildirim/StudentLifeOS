@@ -707,6 +707,7 @@ class SettingsView(QWidget):
         self.set_db_setting('gemini_api_key', self.gemini_input.text().strip())
         self.set_db_setting('openai_api_key', self.openai_input.text().strip())
         self.set_db_setting('anthropic_api_key', self.anthropic_input.text().strip())
+        bus.ai_settings_changed.emit()
         
         # Pop-up yerine Toast bildirim
         if hasattr(self.main_window, 'send_tray_notification'):
@@ -908,6 +909,7 @@ class MainWindow(QMainWindow):
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sound_classes', 'Varsayılan (Windows)')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sound_plans', 'Varsayılan (Windows)')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sound_pomodoro', 'Varsayılan (Windows)')")
+            cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('weather_enabled', '1')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('weather_city', 'İstanbul')")
             cur.execute("UPDATE app_settings SET setting_value = 'İstanbul' WHERE setting_key = 'weather_city' AND setting_value IN ('1', '', 'Otomatik Konum')")
             conn.commit()
@@ -1413,6 +1415,10 @@ class MainWindow(QMainWindow):
         pass
 
     def setup_event_listeners(self):
+        bus.todo_changed.connect(self.dashboard_view.refresh)
+        bus.todo_changed.connect(self.todo_view.load_tasks)
+        bus.projects_changed.connect(self.project_view.load_projects)
+
         bus.habits_changed.connect(self.dashboard_view.refresh)
         bus.habits_changed.connect(self.fitness_view.load_habits)
         

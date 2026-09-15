@@ -1,4 +1,6 @@
 import os
+import html
+import json
 import multiprocessing
 import google.generativeai as genai
 from PySide6.QtWidgets import (
@@ -15,7 +17,7 @@ class AIWorker(QThread):
     error_occurred = Signal(str)
     system_ready = Signal()
 
-    def __init__(self, db, model_choice):
+    def __init__(self, db, model_choice, conversation_history=None):
         super().__init__()
         self.db = db
         self.model_choice = model_choice
@@ -24,6 +26,8 @@ class AIWorker(QThread):
         self.is_running = True
         self.chat_session = None
         self.chat_history = [] 
+        self.conversation_history = conversation_history or []
+        self.local_llm = None
 
     def set_api_key(self, key):
         self.api_key = key
@@ -81,6 +85,7 @@ class AIWorker(QThread):
                     return
 
                 self.chat_history = [{"role": "system", "content": system_prompt}]
+                self.chat_history.extend(self.conversation_history)
                 self.system_ready.emit()
             except Exception as e:
                 self.is_running = False
@@ -108,6 +113,12 @@ class AIWorker(QThread):
                     break
                 try:
                     if "Gemini" in self.model_choice:
+                        context = self.conversation_history[-8:]
+                        if context:
+                            context_text = "\n".join(
+                                f"{item['role']}: {item['content']}" for item in context
+                            )
+                            msg = f"Önceki sohbet bağlamı:\n{context_text}\n\nYeni mesajım:\n{msg}"
                         response = self.chat_session.send_message(msg)
                         try:
                             reply = response.text
@@ -168,6 +179,7 @@ class AIWorker(QThread):
     def stop(self):
         self.is_running = False
         self.message_queue.clear()
+        self.local_llm = None
 
 class AIChatWindow(QFrame):
     def __init__(self, parent=None, db=None):
@@ -177,6 +189,7 @@ class AIChatWindow(QFrame):
         self.worker = None
         self.stopping_workers = []
         self.generation_cancelled = False
+        self.conversation_history = []
         
         self.setFixedSize(450, 600)
         self.setObjectName("ChatSidebar")
@@ -187,6 +200,8 @@ class AIChatWindow(QFrame):
         
         self.hide()
         self.init_ui()
+        self._load_conversation_history()
+        bus.ai_settings_changed.connect(self.refresh_credentials)
         if QApplication.instance():
             QApplication.instance().aboutToQuit.connect(self.shutdown_workers)
 
@@ -196,8 +211,8 @@ class AIChatWindow(QFrame):
         layout.setSpacing(12)
 
         header_lay = QHBoxLayout()
-        lbl_title = QLabel("✨ Asistan")
-        lbl_title.setStyleSheet("color: #3b82f6; font-size: 16px; font-weight: bold; border: none;") 
+        lbl_title = QLabel("🧠  Student Life AI")
+        lbl_title.setStyleSheet("color: #7dd3fc; font-size: 16px; font-weight: bold; border: none;")
         
         self.model_combo = QComboBox()
         self.model_combo.addItems([
@@ -227,13 +242,13 @@ class AIChatWindow(QFrame):
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
         self.chat_display.setStyleSheet("QTextEdit { background-color: #171412; color: #f4f4f5; border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.5; border: 1px solid #292524; }")
-        self.chat_display.append("<span style='color:#a1a1aa;'>Sistem: Model seçimi bekleniyor...</span>")
         layout.addWidget(self.chat_display)
 
         self.lbl_typing = QLabel("")
         self.lbl_typing.setStyleSheet("color: #3b82f6; font-size: 12px; font-style: italic; border: none;") 
         self.lbl_typing.hide()
-        layout.addWidget(self.lbl_typing) 
+        self.lbl_typing.setParent(self.chat_display)
+        self.lbl_typing.setStyleSheet("background-color: #27272a; color: #7dd3fc; border-radius: 8px; padding: 5px 9px; font-size: 12px; font-style: italic;")
         
         self.typing_timer = QTimer(self)
         self.typing_timer.timeout.connect(self.update_typing)
@@ -273,10 +288,72 @@ class AIChatWindow(QFrame):
         input_lay.addWidget(self.btn_stop)
         layout.addLayout(input_lay)
 
+    def _history_key(self, model_name=None):
+        model_name = model_name or self.model_combo.currentText()
+        safe_name = "".join(char if char.isalnum() else "_" for char in model_name.lower())
+        return f"ai_chat_history_{safe_name}"
+
+    def _load_conversation_history(self):
+        try:
+            with self.db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT setting_value FROM app_settings WHERE setting_key = ?",
+                    (self._history_key(),),
+                ).fetchone()
+            history = json.loads(row[0]) if row and row[0] else []
+            self.conversation_history = [
+                item for item in history
+                if item.get("role") in ("user", "assistant") and item.get("content")
+            ]
+        except (ValueError, TypeError, json.JSONDecodeError):
+            self.conversation_history = []
+        except Exception:
+            self.conversation_history = []
+        self.render_conversation()
+
+    def _save_conversation_history(self):
+        try:
+            value = json.dumps(self.conversation_history[-40:], ensure_ascii=False)
+            with self.db.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?) "
+                    "ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value",
+                    (self._history_key(), value),
+                )
+                conn.commit()
+        except Exception:
+            pass
+
+    def render_conversation(self):
+        self.chat_display.clear()
+        if not self.conversation_history:
+            self.chat_display.append(
+                "<p style='color:#94a3b8;'><b>🧠 Student Life AI</b><br>"
+                "Hazırım. Derslerini, planlarını ve projelerini birlikte yönetebiliriz.</p>"
+            )
+            return
+        for item in self.conversation_history:
+            content = html.escape(str(item["content"])).replace("\n", "<br>")
+            if item["role"] == "user":
+                self.chat_display.append(
+                    f"<p><b style='color:#f8fafc;'>👤 Sen</b><br>{content}</p>"
+                )
+            else:
+                self.chat_display.append(
+                    f"<p><b style='color:#10b981;'>🧠 Student Life AI</b><br>{content}</p>"
+                )
+        self.scroll_to_bottom()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.lbl_typing.adjustSize()
+        self.lbl_typing.move(26, self.chat_display.height() - self.lbl_typing.height() - 18)
+
     def showEvent(self, event):
         super().showEvent(event)
         if not self.worker:
             self.setup_ai()
+        self.render_conversation()
 
     def hideEvent(self, event):
         super().hideEvent(event)
@@ -291,7 +368,7 @@ class AIChatWindow(QFrame):
             self.stop_worker(worker)
 
     def closeEvent(self, event):
-        self.shutdown_workers()
+        self.hide()
         event.accept()
 
     def shutdown_workers(self):
@@ -372,6 +449,7 @@ class AIChatWindow(QFrame):
             
         self.typing_timer.stop()
         self.lbl_typing.hide()
+        self._load_conversation_history()
             
         selected_model = self.model_combo.currentText()
         self.chat_display.append(f"<br><span style='color:#f59e0b;'>Sistem: {selected_model} modeline geçiliyor...</span>")
@@ -402,7 +480,7 @@ class AIChatWindow(QFrame):
                 self.show_local_model_missing()
                 return False
 
-            self.worker = AIWorker(self.db, selected_model)
+            self.worker = AIWorker(self.db, selected_model, self.conversation_history)
             self.worker.finished.connect(self.worker.deleteLater)
             self.worker.response_ready.connect(self.on_response)
             self.worker.error_occurred.connect(self.on_error)
@@ -440,7 +518,7 @@ class AIChatWindow(QFrame):
             if hasattr(self, 'btn_send'): self.btn_send.setEnabled(False)
             return False
             
-        self.worker = AIWorker(self.db, selected_model)
+        self.worker = AIWorker(self.db, selected_model, self.conversation_history)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.set_api_key(api_key)
         self.worker.response_ready.connect(self.on_response)
@@ -450,8 +528,10 @@ class AIChatWindow(QFrame):
         return True
 
     def on_ready(self):
-        self.chat_display.clear()
-        self.chat_display.append(f"<span style='color:#3b82f6;'>Sistem: {self.model_combo.currentText()} aktif. Size nasıl yardımcı olabilirim?</span><br>")
+        if not self.conversation_history:
+            self.chat_display.append(f"<p style='color:#7dd3fc;'><b>🧠 Student Life AI</b><br>{self.model_combo.currentText()} aktif. Size nasıl yardımcı olabilirim?</p>")
+        else:
+            self.render_conversation()
         self.input_field.setEnabled(True)
         self.btn_send.setEnabled(True)
         self.btn_stop.hide()
@@ -491,7 +571,9 @@ class AIChatWindow(QFrame):
         if not self.worker or not self.worker.is_running:
             if not self.setup_ai(): return
 
-        self.chat_display.append(f"<br><span style='color:#f4f4f5;'><b>Sen:</b></span> {text}<br>")
+        self.conversation_history.append({"role": "user", "content": text})
+        self._save_conversation_history()
+        self.render_conversation()
         self.input_field.clear()
         self.input_field.setEnabled(False)
         self.btn_send.setEnabled(False)
@@ -513,12 +595,9 @@ class AIChatWindow(QFrame):
         self.btn_stop.hide()
         
         model_name = self.model_combo.currentText().split(' ')[0]
-        cursor = self.chat_display.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertHtml(f"<br><b style='color:#10b981;'>{model_name}:</b> ")
-        cursor.insertMarkdown(str(reply_text or "").strip())
-        cursor.insertHtml("<br><br>")
-        self.chat_display.setTextCursor(cursor)
+        self.conversation_history.append({"role": "assistant", "content": str(reply_text or "").strip()})
+        self._save_conversation_history()
+        self.render_conversation()
         
         try:
             if self.main_window:
@@ -547,6 +626,21 @@ class AIChatWindow(QFrame):
         self.btn_send.setEnabled(True)
         self.input_field.setFocus()
         self.scroll_to_bottom()
+
+    def refresh_credentials(self):
+        if "Yerel" in self.model_combo.currentText():
+            return
+        if self.worker:
+            worker = self.worker
+            self.worker = None
+            self.stop_worker(worker)
+        self.typing_timer.stop()
+        self.lbl_typing.hide()
+        self.input_field.setEnabled(False)
+        self.btn_send.setEnabled(False)
+        self.chat_display.append("<p style='color:#f59e0b;'>🔐 API anahtarı kaydedildi. Chat bağlantısı yenileniyor...</p>")
+        if self.isVisible():
+            QTimer.singleShot(150, self.setup_ai)
 
     def on_error(self, error_msg):
         if self.generation_cancelled:

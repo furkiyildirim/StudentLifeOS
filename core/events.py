@@ -10,6 +10,9 @@ class AppEventBus(QObject):
     notes_changed = Signal()       
     calendar_changed = Signal()    
     study_time_changed = Signal()
+    todo_changed = Signal()
+    projects_changed = Signal()
+    ai_settings_changed = Signal()
 
     # --- YENİ: Kayıt ve Silme Bildirim Sinyalleri ---
     item_saved = Signal(str)       # Örn: "Yeni plan kaydedildi."
