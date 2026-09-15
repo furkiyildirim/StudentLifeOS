@@ -593,6 +593,20 @@ class DashboardView(QWidget):
         if hasattr(self.main_window, "music_view"):
             self.main_window.music_view.tabs.setCurrentIndex(2)
 
+    def _get_semester_bounds(self):
+        with self.db.get_connection() as conn:
+            rows = conn.execute("""
+                SELECT setting_key, setting_value
+                FROM app_settings
+                WHERE setting_key IN ('semester_start_date', 'semester_end_date')
+            """).fetchall()
+
+        settings = {row["setting_key"]: row["setting_value"] for row in rows}
+        return (
+            settings.get("semester_start_date") or "0001-01-01",
+            settings.get("semester_end_date") or "9999-12-31",
+        )
+
     def refresh(self):
         now = datetime.now()
         hour = now.hour
@@ -609,10 +623,15 @@ class DashboardView(QWidget):
 
         today_dow = now.weekday()
         today_iso = date.today().isoformat()
+        semester_start, semester_end = self._get_semester_bounds()
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM timetable WHERE day_of_week = ?", (today_dow,))
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM timetable
+                WHERE day_of_week = ? AND ? BETWEEN ? AND ?
+            """, (today_dow, today_iso, semester_start, semester_end))
             c_cnt = cur.fetchone()[0]
 
             cur.execute("SELECT COUNT(*) FROM assessments WHERE due_date >= ?", (today_iso,))
@@ -732,6 +751,7 @@ class DashboardView(QWidget):
 
         today_dow = datetime.now().weekday()
         today_iso = date.today().isoformat()
+        semester_start, semester_end = self._get_semester_bounds()
         items = []
 
         with self.db.get_connection() as conn:
@@ -741,8 +761,8 @@ class DashboardView(QWidget):
                       t.start_time, t.end_time, c.color_hex
                 FROM timetable t 
                 JOIN courses c ON t.course_id = c.id 
-                WHERE t.day_of_week = ?
-            """, (today_dow,))
+                WHERE t.day_of_week = ? AND ? BETWEEN ? AND ?
+            """, (today_dow, today_iso, semester_start, semester_end))
             for r in cur.fetchall():
                 items.append({
                     "time": r["start_time"],

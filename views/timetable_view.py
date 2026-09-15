@@ -426,8 +426,30 @@ class TimetableView(QWidget):
         self.table.slot_delete.connect(self.delete_slot)
 
         lay.addWidget(self.table)
+        self._ensure_default_semester_dates()
         self.load_schedule()
         return tab
+
+    def _ensure_default_semester_dates(self):
+        current_year = QDate.currentDate().year()
+        default_start = QDate(current_year, 9, 15).toString("yyyy-MM-dd")
+        default_end = QDate(current_year + 1, 1, 31).toString("yyyy-MM-dd")
+
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO app_settings (setting_key, setting_value)
+                VALUES ('semester_start_date', ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                WHERE app_settings.setting_value IS NULL OR app_settings.setting_value = ''
+            """, (default_start,))
+            cur.execute("""
+                INSERT INTO app_settings (setting_key, setting_value)
+                VALUES ('semester_end_date', ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                WHERE app_settings.setting_value IS NULL OR app_settings.setting_value = ''
+            """, (default_end,))
+            conn.commit()
 
     def _get_semester_start_date(self):
         with self.db.get_connection() as conn:
@@ -461,6 +483,7 @@ class TimetableView(QWidget):
             )
             conn.commit()
         self.refresh_semester_warning()
+        bus.courses_changed.emit()
 
     def save_semester_end_date(self, date_value):
         if not date_value or not date_value.isValid():
@@ -476,6 +499,7 @@ class TimetableView(QWidget):
             )
             conn.commit()
         self.refresh_semester_warning()
+        bus.courses_changed.emit()
 
     def refresh_semester_warning(self):
         semester_start_date = self._get_semester_start_date()

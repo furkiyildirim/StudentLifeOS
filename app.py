@@ -48,12 +48,28 @@ def ensure_single_instance():
     global _SINGLE_INSTANCE_LOCK
     lock_name = "student_life_os_single_instance.lock"
     lock_path = os.path.join(tempfile.gettempdir(), lock_name)
+
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
     except FileExistsError:
-        return False
+        try:
+            with open(lock_path, "r", encoding="ascii") as lock_file:
+                existing_pid = int(lock_file.read().strip())
+            os.kill(existing_pid, 0)
+        except (FileNotFoundError, ProcessLookupError, ValueError, OSError):
+            try:
+                os.remove(lock_path)
+            except FileNotFoundError:
+                pass
+            try:
+                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            except FileExistsError:
+                return False
+        else:
+            return False
 
     _SINGLE_INSTANCE_LOCK = fd
+    os.write(fd, str(os.getpid()).encode("ascii"))
     return True
 
 def remove_single_instance_lock():
