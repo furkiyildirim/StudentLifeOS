@@ -399,33 +399,6 @@ class CalendarView(QWidget):
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            
-            cur.execute("""
-                  SELECT t.id, c.code, c.name, COALESCE(t.classroom, c.classroom) AS classroom,
-                      t.start_time, t.end_time, c.color_hex
-                FROM timetable t
-                JOIN courses c ON t.course_id = c.id
-                WHERE t.day_of_week = ?
-                ORDER BY t.start_time
-            """, (dow,))
-            for cl in cur.fetchall():
-                cur.execute("SELECT 1 FROM calendar_completions WHERE item_type='class' AND item_id=? AND date=?", (cl["id"], iso_date))
-                is_completed = bool(cur.fetchone())
-
-                c_color = cl["color_hex"] if cl["color_hex"] else "#38bdf8"
-                status_icon = "☑" if is_completed else "☐"
-                item = QListWidgetItem(f"{status_icon} 🎓 DERS: {cl['code']} ({cl['start_time']} - {cl['end_time']}) — {cl['classroom']}")
-                
-                if is_completed:
-                    font = item.font()
-                    font.setStrikeOut(True)
-                    item.setFont(font)
-                    item.setForeground(QColor("#71717a"))
-                else:
-                    item.setForeground(QColor(c_color))
-                    
-                item.setData(Qt.UserRole, {"type": "class", "id": cl["id"], "title": cl["name"], "completed": is_completed})
-                self.events_list.addItem(item)
 
             cur.execute("""
                 SELECT a.id, a.title, a.due_date, c.code

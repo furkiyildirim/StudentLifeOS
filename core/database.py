@@ -12,6 +12,7 @@ class DatabaseManager:
     def get_connection(self):
         conn = sqlite3.connect(self.db_name)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def init_db(self):
@@ -49,6 +50,7 @@ class DatabaseManager:
                 start_time TEXT NOT NULL,     -- '09:00'
                 end_time TEXT NOT NULL,       -- '10:30'
                 instructor TEXT,
+                instructor_contact TEXT,
                 classroom TEXT
             );
             """)
@@ -58,6 +60,8 @@ class DatabaseManager:
             }
             if "instructor" not in timetable_columns:
                 cur.execute("ALTER TABLE timetable ADD COLUMN instructor TEXT")
+            if "instructor_contact" not in timetable_columns:
+                cur.execute("ALTER TABLE timetable ADD COLUMN instructor_contact TEXT")
             if "classroom" not in timetable_columns:
                 cur.execute("ALTER TABLE timetable ADD COLUMN classroom TEXT")
             cur.execute("""
@@ -65,10 +69,13 @@ class DatabaseManager:
                 SET instructor = COALESCE(instructor, (
                     SELECT instructor FROM courses WHERE courses.id = timetable.course_id
                 )),
+                    instructor_contact = COALESCE(instructor_contact, (
+                        SELECT instructor_contact FROM courses WHERE courses.id = timetable.course_id
+                    )),
                     classroom = COALESCE(classroom, (
                         SELECT classroom FROM courses WHERE courses.id = timetable.course_id
                     ))
-                WHERE instructor IS NULL OR classroom IS NULL
+                WHERE instructor IS NULL OR instructor_contact IS NULL OR classroom IS NULL
             """)
 
             # 3. Sınavlar ve Notlar
@@ -81,6 +88,11 @@ class DatabaseManager:
                 score REAL,                   -- 0 - 100 arası (girilmediyse NULL)
                 due_date TEXT NOT NULL        -- 'YYYY-MM-DD HH:MM'
             );
+            """)
+            cur.execute("""
+                DELETE FROM assessments
+                WHERE course_id IS NOT NULL
+                  AND course_id NOT IN (SELECT id FROM courses)
             """)
 
             # 4. Not Defteri (Markdown)
@@ -132,9 +144,15 @@ class DatabaseManager:
                 exercise_name TEXT NOT NULL,
                 sets INTEGER NOT NULL,
                 reps INTEGER NOT NULL,
-                weight REAL DEFAULT 0.0
+                weight REAL DEFAULT 0.0,
+                video_url TEXT
             );
             """)
+
+            try:
+                cur.execute("ALTER TABLE workout_exercises ADD COLUMN video_url TEXT")
+            except Exception:
+                pass
             
             # 8. Takvim Etkinlikleri
             cur.execute("""

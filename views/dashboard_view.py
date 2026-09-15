@@ -63,38 +63,27 @@ class WeatherWorker(QThread):
                 
                 cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'weather_city'")
                 m_loc = cur.fetchone()
-                selected_city = m_loc[0].strip() if m_loc and m_loc[0] != "1" else ""
+                selected_city = m_loc[0].strip() if m_loc and m_loc[0] else "İstanbul"
+                if selected_city in ("1", "Otomatik Konum"):
+                    selected_city = "İstanbul"
 
             location_params = {
                 "count": 1,
                 "language": "tr",
                 "format": "json",
             }
-            if selected_city and selected_city != "Otomatik Konum":
-                location_params["name"] = selected_city
-                location_response = requests.get(
-                    "https://geocoding-api.open-meteo.com/v1/search",
-                    params=location_params,
-                    timeout=(5, 10),
-                )
-                location_response.raise_for_status()
-                locations = location_response.json().get("results", [])
-                if not locations:
-                    self.result_ready.emit("📍 Şehir bulunamadı")
-                    return
-                location = locations[0]
-            else:
-                location_response = requests.get(
-                    "https://ipapi.co/json/",
-                    timeout=(5, 10),
-                )
-                location_response.raise_for_status()
-                ip_location = location_response.json()
-                location = {
-                    "name": ip_location.get("city", "Konum"),
-                    "latitude": ip_location["latitude"],
-                    "longitude": ip_location["longitude"],
-                }
+            location_params["name"] = selected_city
+            location_response = requests.get(
+                "https://geocoding-api.open-meteo.com/v1/search",
+                params=location_params,
+                timeout=(5, 10),
+            )
+            location_response.raise_for_status()
+            locations = location_response.json().get("results", [])
+            if not locations:
+                self.result_ready.emit("📍 Şehir bulunamadı")
+                return
+            location = locations[0]
 
             weather_response = requests.get(
                 "https://api.open-meteo.com/v1/forecast",
@@ -668,7 +657,13 @@ class DashboardView(QWidget):
         colors = ["#38bdf8", "#f43f5e", "#10b981", "#f59e0b", "#a855f7"]
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT title, weight FROM assessments ORDER BY due_date ASC LIMIT 5")
+            cur.execute("""
+                SELECT a.title, a.weight
+                FROM assessments a
+                JOIN courses c ON c.id = a.course_id
+                ORDER BY a.due_date ASC
+                LIMIT 5
+            """)
             for idx, r in enumerate(cur.fetchall()):
                 c = colors[idx % len(colors)]
                 segments.append((r["title"], r["weight"], c))

@@ -2,10 +2,11 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QPushButton, QDialog, QLineEdit, QComboBox,
     QSpinBox, QDoubleSpinBox, QMessageBox, QHeaderView, QTabWidget,
-    QFrame, QScrollArea, QAbstractItemView, QMenu, QStyledItemDelegate, QStyle
+    QFrame, QScrollArea, QAbstractItemView, QMenu, QStyledItemDelegate, QStyle,
+    QDateEdit, QGridLayout
 )
 from PySide6.QtGui import QCursor, QColor, QDrag, QBrush
-from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer
+from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer, QDate
 from PySide6.QtGui import QCursor, QColor, QDrag
 from core.sound import play_action_sound
 from core.events import bus
@@ -176,7 +177,7 @@ class InteractiveTimetableWidget(QTableWidget):
         if item:
             data = item.data(Qt.UserRole)
             if data and data.get("slot_id"):
-                self.slot_edit.emit(data)
+                self.course_details_requested.emit(data)
 
 # =========================================================================
 # 2. DEĞERLENDİRME & NOT KARTI BİLEŞENİ
@@ -348,12 +349,34 @@ class TimetableView(QWidget):
         info_lbl = QLabel("💡 İpucu: Dersi başka bir güne sürükleyip bırakabilir veya sağ tıklayarak güncelleyebilirsiniz.")
         info_lbl.setStyleSheet("color: #71717a; font-size: 11px;")
 
+        self.semester_start_edit = QDateEdit()
+        self.semester_start_edit.setCalendarPopup(True)
+        self.semester_start_edit.setDisplayFormat("dd.MM.yyyy")
+        self.semester_start_edit.setStyleSheet("background-color: #1c1917; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px;")
+        self.semester_start_edit.dateChanged.connect(self.save_semester_start_date)
+
+        self.semester_end_edit = QDateEdit()
+        self.semester_end_edit.setCalendarPopup(True)
+        self.semester_end_edit.setDisplayFormat("dd.MM.yyyy")
+        self.semester_end_edit.setStyleSheet("background-color: #1c1917; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px;")
+        self.semester_end_edit.dateChanged.connect(self.save_semester_end_date)
+
+        self.semester_warning = QLabel()
+        self.semester_warning.setWordWrap(True)
+        self.semester_warning.setStyleSheet("color: #fca5a5; font-size: 11px; font-weight: 600; padding: 6px 10px; background-color: rgba(127, 29, 29, 0.35); border: 1px solid rgba(248, 113, 113, 0.35); border-radius: 6px;")
+        self.semester_warning.setVisible(False)
+
         top_bar.addWidget(btn_add_course)
         top_bar.addWidget(btn_add_slot)
         top_bar.addSpacing(10)
         top_bar.addWidget(info_lbl)
         top_bar.addStretch()
+        top_bar.addWidget(QLabel("Dönem Başlangıcı:"))
+        top_bar.addWidget(self.semester_start_edit)
+        top_bar.addWidget(QLabel("Dönem Bitişi:"))
+        top_bar.addWidget(self.semester_end_edit)
         lay.addLayout(top_bar)
+        lay.addWidget(self.semester_warning)
 
         # Sürükle-Bırak Destekli Haftalık Grid
         self.table = InteractiveTimetableWidget()
@@ -361,21 +384,36 @@ class TimetableView(QWidget):
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(DAYS_TR)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setStyleSheet("""
+            QHeaderView::section {
+                background-color: #1c1917;
+                color: #e4e4e7;
+                border: 1px solid #292524;
+                padding: 8px;
+                font-weight: 700;
+            }
+        """)
         self.table.verticalHeader().setVisible(False)
         self.table.setShowGrid(True)
+        self.table.setAlternatingRowColors(False)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setFocusPolicy(Qt.StrongFocus)
         self.table.setStyleSheet("""
             QTableWidget {
-                background-color: #141210;
-                border: 1px solid #292524;
-                border-radius: 8px;
-                gridline-color: #24201d;
+                background-color: #0f0d0c;
+                border: 1px solid #2b2927;
+                border-radius: 12px;
+                gridline-color: rgba(255,255,255,0.06);
+                color: #f4f4f5;
             }
             QTableWidget::item {
                 padding: 6px;
-                border-radius: 6px;
+                border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.04);
             }
             QTableWidget::item:selected {
-                background-color: transparent;
+                background-color: rgba(56, 189, 248, 0.15);
                 border: 1px solid #38bdf8;
             }
         """)
@@ -391,7 +429,108 @@ class TimetableView(QWidget):
         self.load_schedule()
         return tab
 
+    def _get_semester_start_date(self):
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'semester_start_date'")
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return None
+            return QDate.fromString(str(row[0]), "yyyy-MM-dd")
+
+    def _get_semester_end_date(self):
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'semester_end_date'")
+            row = cur.fetchone()
+            if not row or not row[0]:
+                return None
+            return QDate.fromString(str(row[0]), "yyyy-MM-dd")
+
+    def save_semester_start_date(self, date_value):
+        if not date_value or not date_value.isValid():
+            return
+
+        value = date_value.toString("yyyy-MM-dd")
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_start_date', ?) "
+                "ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value",
+                (value,)
+            )
+            conn.commit()
+        self.refresh_semester_warning()
+
+    def save_semester_end_date(self, date_value):
+        if not date_value or not date_value.isValid():
+            return
+
+        value = date_value.toString("yyyy-MM-dd")
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_end_date', ?) "
+                "ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value",
+                (value,)
+            )
+            conn.commit()
+        self.refresh_semester_warning()
+
+    def refresh_semester_warning(self):
+        semester_start_date = self._get_semester_start_date()
+        semester_end_date = self._get_semester_end_date()
+        if semester_start_date and semester_start_date.isValid():
+            self.semester_start_edit.setDate(semester_start_date)
+        else:
+            self.semester_start_edit.clear()
+
+        if not semester_end_date or not semester_end_date.isValid():
+            self.semester_warning.setVisible(False)
+            self.semester_end_edit.clear()
+            return
+
+        self.semester_end_edit.setDate(semester_end_date)
+        today = QDate.currentDate()
+
+        if semester_start_date and semester_start_date.isValid() and today < semester_start_date:
+            days_until_start = semester_start_date.daysTo(today) * -1
+            text = f"📌 Bugün: {today.toString('dd.MM.yyyy')} | Dönem başlangıcı: {semester_start_date.toString('dd.MM.yyyy')} ({days_until_start} gün kaldı)"
+            fg = "#86efac"
+            bg = "rgba(20, 83, 45, 0.35)"
+            border = "rgba(34, 197, 94, 0.35)"
+        elif today > semester_end_date:
+            text = f"⚠️ Bugün: {today.toString('dd.MM.yyyy')} | Ders dönemi sona erdi. Programdaki derslerin tamamlanmış olduğunu kontrol edin."
+            fg = "#fca5a5"
+            bg = "rgba(127, 29, 29, 0.35)"
+            border = "rgba(248, 113, 113, 0.35)"
+        elif today == semester_end_date:
+            text = f"📌 Bugün: {today.toString('dd.MM.yyyy')} | Ders dönemi son günü. Programı kontrol edebilirsiniz."
+            fg = "#fcd34d"
+            bg = "rgba(120, 53, 15, 0.35)"
+            border = "rgba(251, 191, 36, 0.35)"
+        else:
+            days_left = semester_end_date.daysTo(today) * -1
+            text = f"📌 Bugün: {today.toString('dd.MM.yyyy')} | Dönem sonu: {semester_end_date.toString('dd.MM.yyyy')} ({days_left} gün kaldı)"
+            if days_left <= 30:
+                fg = "#fcd34d"
+                bg = "rgba(120, 53, 15, 0.35)"
+                border = "rgba(251, 191, 36, 0.35)"
+            else:
+                fg = "#86efac"
+                bg = "rgba(20, 83, 45, 0.35)"
+                border = "rgba(34, 197, 94, 0.35)"
+
+        self.semester_warning.setText(text)
+        self.semester_warning.setStyleSheet(
+            f"color: {fg}; font-size: 11px; font-weight: 600; "
+            f"padding: 6px 10px; background-color: {bg}; "
+            f"border: 1px solid {border}; border-radius: 6px;"
+        )
+        self.semester_warning.setVisible(True)
+
     def load_schedule(self):
+        self.refresh_semester_warning()
         self.table.setRowCount(8)
         for r in range(8):
             self.table.setRowHeight(r, 92)
@@ -404,7 +543,11 @@ class TimetableView(QWidget):
             cur = conn.cursor()
             cur.execute("""
                   SELECT t.id, t.day_of_week, t.start_time, t.end_time,
-                      c.code, c.name, t.instructor, t.classroom, c.color_hex, t.course_id
+                      c.code, c.name,
+                      COALESCE(t.instructor, c.instructor) AS instructor,
+                      COALESCE(t.instructor_contact, c.instructor_contact) AS instructor_contact,
+                      COALESCE(t.classroom, c.classroom) AS classroom,
+                      c.color_hex, t.course_id
                 FROM timetable t
                 JOIN courses c ON t.course_id = c.id
                 ORDER BY t.start_time ASC
@@ -429,6 +572,7 @@ class TimetableView(QWidget):
                 item.setTextAlignment(Qt.AlignCenter)
                 item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled)
                 item.setForeground(QColor("#ffffff"))
+                item.setToolTip(f"{s['name']}\n{DAYS_TR[s['day_of_week']]} • {s['start_time']} - {s['end_time']}\n{(s['classroom'] or 'Amfi belirtilmedi')}\n{(s['instructor'] or 'Öğretim görevlisi belirtilmedi')}\n{(s['instructor_contact'] or 'İletişim bilgisi yok')}")
                 
                 item.setBackground(QBrush(bg_color))
                 
@@ -442,11 +586,71 @@ class TimetableView(QWidget):
                     "start_time": s["start_time"],
                     "end_time": s["end_time"],
                     "classroom": s["classroom"] or "",
-                    "instructor": s["instructor"] or ""
+                    "instructor": s["instructor"] or "",
+                    "instructor_contact": s["instructor_contact"] or ""
                 })
                 
                 self.table.setItem(row_idx, dow, item)
                 day_counters[dow] += 1
+
+    def refresh_slot_cell(self, slot_id: int):
+        with self.db.get_connection() as conn:
+            slot = conn.execute("""
+                SELECT t.id, t.day_of_week, t.start_time, t.end_time,
+                       c.code, c.name,
+                       COALESCE(t.instructor, c.instructor) AS instructor,
+                       COALESCE(t.instructor_contact, c.instructor_contact) AS instructor_contact,
+                       COALESCE(t.classroom, c.classroom) AS classroom,
+                       c.color_hex, t.course_id
+                FROM timetable t
+                JOIN courses c ON t.course_id = c.id
+                WHERE t.id = ?
+            """, (slot_id,)).fetchone()
+
+        if not slot:
+            self.load_schedule()
+            return
+
+        for row in range(self.table.rowCount()):
+            for column in range(self.table.columnCount()):
+                item = self.table.item(row, column)
+                data = item.data(Qt.UserRole) if item else None
+                if data and data.get("slot_id") == slot_id:
+                    if (
+                        data.get("day_of_week") != slot["day_of_week"]
+                        or data.get("start_time") != slot["start_time"]
+                    ):
+                        self.load_schedule()
+                        return
+
+                    item.setText(
+                        f"{slot['code']}\n{slot['start_time']} - {slot['end_time']}\n"
+                        f"({slot['classroom'] or 'Amfi belirtilmedi'})\n"
+                        f"{slot['instructor'] or 'Öğretim görevlisi belirtilmedi'}"
+                    )
+                    item.setToolTip(
+                        f"{slot['name']}\n{DAYS_TR[slot['day_of_week']]} • "
+                        f"{slot['start_time']} - {slot['end_time']}\n"
+                        f"{slot['classroom'] or 'Amfi belirtilmedi'}\n"
+                        f"{slot['instructor'] or 'Öğretim görevlisi belirtilmedi'}\n"
+                        f"{slot['instructor_contact'] or 'İletişim bilgisi yok'}"
+                    )
+                    item.setData(Qt.UserRole, {
+                        "slot_id": slot["id"],
+                        "course_id": slot["course_id"],
+                        "code": slot["code"],
+                        "name": slot["name"],
+                        "day_of_week": slot["day_of_week"],
+                        "start_time": slot["start_time"],
+                        "end_time": slot["end_time"],
+                        "classroom": slot["classroom"] or "",
+                        "instructor": slot["instructor"] or "",
+                        "instructor_contact": slot["instructor_contact"] or ""
+                    })
+                    item.tableWidget().viewport().update()
+                    return
+
+        self.load_schedule()
 
     def handle_slot_moved(self, slot_id: int, new_day_of_week: int):
         with self.db.get_connection() as conn:
@@ -477,6 +681,7 @@ class TimetableView(QWidget):
         end_in = QLineEdit(slot_data["end_time"])
         room_in = QLineEdit(slot_data["classroom"])
         instructor_in = QLineEdit(slot_data["instructor"])
+        instructor_contact_in = QLineEdit(slot_data.get("instructor_contact", ""))
 
         lay.addWidget(QLabel("Gün:"))
         lay.addWidget(day_box)
@@ -488,6 +693,8 @@ class TimetableView(QWidget):
         lay.addWidget(room_in)
         lay.addWidget(QLabel("Öğretim Görevlisi:"))
         lay.addWidget(instructor_in)
+        lay.addWidget(QLabel("Hoca İletişim Bilgileri:"))
+        lay.addWidget(instructor_contact_in)
 
         btn_save = QPushButton("Güncelle")
         btn_save.setObjectName("AccentButton")
@@ -500,15 +707,14 @@ class TimetableView(QWidget):
                 cur.execute("""
                     UPDATE timetable 
                     SET day_of_week = ?, start_time = ?, end_time = ?,
-                        classroom = ?, instructor = ?
+                        classroom = ?, instructor = ?, instructor_contact = ?
                     WHERE id = ?
                 """, (day_box.currentData(), start_in.text().strip(), end_in.text().strip(),
-                      room_in.text().strip(), instructor_in.text().strip(), slot_data["slot_id"]))
+                      room_in.text().strip(), instructor_in.text().strip(), instructor_contact_in.text().strip(), slot_data["slot_id"]))
                 conn.commit()
             play_action_sound("save")
             dlg.accept()
-            self.load_schedule()
-            bus.courses_changed.emit()
+            self.refresh_slot_cell(slot_data["slot_id"])
 
         btn_save.clicked.connect(save)
         dlg.exec()
@@ -565,36 +771,81 @@ class TimetableView(QWidget):
                 SELECT code, name, instructor, instructor_contact, classroom, credit
                 FROM courses WHERE id = ?
             """, (slot_data["course_id"],)).fetchone()
+            slot = conn.execute("""
+                SELECT id, start_time, end_time, instructor, instructor_contact, classroom
+                FROM timetable WHERE id = ?
+            """, (slot_data.get("slot_id"),)).fetchone()
 
         if not course:
             return
 
+        slot_instructor = (slot["instructor"] if slot and slot["instructor"] else course["instructor"]) or "Belirtilmemiş"
+        slot_contact = (slot["instructor_contact"] if slot and slot["instructor_contact"] else course["instructor_contact"]) or "Belirtilmemiş"
+        slot_classroom = (slot["classroom"] if slot and slot["classroom"] else course["classroom"]) or "Belirtilmemiş"
+
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Ders Detayları - {course['code']}")
-        dlg.resize(360, 300)
+        dlg.resize(420, 360)
+        dlg.setStyleSheet("QDialog { background-color: #141210; color: #f4f4f5; }")
         lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(18, 18, 18, 18)
+        lay.setSpacing(12)
 
-        title = QLabel(f"<b>{course['code']} - {course['name']}</b>")
-        title.setStyleSheet("font-size: 16px; color: #38bdf8;")
-        lay.addWidget(title)
+        header = QFrame()
+        header.setStyleSheet("QFrame { background-color: #1c1917; border: 1px solid #292524; border-radius: 12px; }")
+        header_lay = QVBoxLayout(header)
+        header_lay.setContentsMargins(14, 12, 14, 12)
 
-        details = QLabel(
-            f"Kredi: {course['credit'] or 0}\n"
-            f"Dersin hocası: {course['instructor'] or 'Belirtilmemiş'}\n"
-            f"Hocanın iletişimi: {course['instructor_contact'] or 'Belirtilmemiş'}\n\n"
-            f"Bu çizelge saati için hoca: {slot_data['instructor'] or 'Belirtilmemiş'}\n"
-            f"Bu çizelge saati için derslik: {slot_data['classroom'] or 'Belirtilmemiş'}"
-        )
-        details.setWordWrap(True)
-        details.setStyleSheet("font-size: 13px; line-height: 1.5; color: #e4e4e7;")
-        lay.addWidget(details)
+        code_label = QLabel(f"{course['code']}")
+        code_label.setStyleSheet("font-size: 12px; font-weight: 700; color: #7dd3fc; letter-spacing: 1px;")
+        title_label = QLabel(f"{course['name']}")
+        title_label.setStyleSheet("font-size: 18px; font-weight: 800; color: #ffffff;")
+        header_lay.addWidget(code_label)
+        header_lay.addWidget(title_label)
+        lay.addWidget(header)
+
+        info = QFrame()
+        info.setStyleSheet("QFrame { background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; }")
+        info_lay = QGridLayout(info)
+        info_lay.setContentsMargins(12, 12, 12, 12)
+        info_lay.setHorizontalSpacing(16)
+        info_lay.setVerticalSpacing(10)
+
+        rows = [
+            ("Kredi", f"{course['credit'] or 0}"),
+            ("Derslik", slot_classroom),
+            ("Saat", f"{slot['start_time'] if slot and slot['start_time'] else slot_data.get('start_time', '')} - {slot['end_time'] if slot and slot['end_time'] else slot_data.get('end_time', '')}"),
+            ("Hoca", slot_instructor),
+            ("İletişim", slot_contact),
+        ]
+
+        for i, (label, value) in enumerate(rows):
+            row_bg = QFrame()
+            row_bg.setStyleSheet("QFrame { background: rgba(255,255,255,0.02); border-radius: 8px; }")
+            row_lay = QHBoxLayout(row_bg)
+            row_lay.setContentsMargins(10, 8, 10, 8)
+
+            title_widget = QLabel(label)
+            title_widget.setStyleSheet("font-size: 11px; color: #a1a1aa; font-weight: 700;")
+            value_widget = QLabel(str(value))
+            value_widget.setWordWrap(True)
+            value_widget.setStyleSheet("font-size: 13px; color: #f4f4f5; font-weight: 600;")
+
+            row_lay.addWidget(title_widget)
+            row_lay.addStretch()
+            row_lay.addWidget(value_widget)
+            info_lay.addWidget(row_bg, i, 0, 1, 2)
+
+        lay.addWidget(info)
 
         buttons = QHBoxLayout()
         btn_edit = QPushButton("Düzenle")
         btn_edit.setObjectName("AccentButton")
+        btn_edit.setCursor(QCursor(Qt.PointingHandCursor))
         btn_delete = QPushButton("Dersi Tamamen Sil")
-        btn_delete.setStyleSheet("color: #f43f5e; border: 1px solid #f43f5e; padding: 6px 10px;")
+        btn_delete.setStyleSheet("background-color: #1f1b18; color: #fca5a5; border: 1px solid #f43f5e; border-radius: 6px; padding: 7px 10px; font-weight: 600;")
         btn_close = QPushButton("Kapat")
+        btn_close.setStyleSheet("background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 7px 10px; font-weight: 600;")
         buttons.addWidget(btn_edit)
         buttons.addWidget(btn_delete)
         buttons.addWidget(btn_close)
@@ -630,6 +881,8 @@ class TimetableView(QWidget):
         lay = QVBoxLayout(dlg)
 
         code_in = QLineEdit(course["code"])
+        code_in.setReadOnly(True)
+        code_in.setStyleSheet("background-color: #1c1917; color: #a1a1aa; border: 1px solid #3f3f46; border-radius: 6px; padding: 6px;")
         name_in = QLineEdit(course["name"])
         instructor_in = QLineEdit(course["instructor"] or "")
         contact_in = QLineEdit(course["instructor_contact"] or "")
@@ -639,7 +892,7 @@ class TimetableView(QWidget):
         credit_in.setValue(int(course["credit"] or 3))
 
         for label, widget in (
-            ("Ders kodu:", code_in),
+            ("Ders kodu (değiştirilemez):", code_in),
             ("Ders adı:", name_in),
             ("Öğretim görevlisi:", instructor_in),
             ("Hocanın iletişim bilgileri:", contact_in),
@@ -662,13 +915,14 @@ class TimetableView(QWidget):
                 return
             try:
                 with self.db.get_connection() as conn:
-                    conn.execute("""
+                    cur = conn.cursor()
+                    cur.execute("""
                         UPDATE courses
-                        SET code = ?, name = ?, instructor = ?, instructor_contact = ?,
+                        SET name = ?, instructor = ?, instructor_contact = ?,
                             classroom = ?, credit = ?
                         WHERE id = ?
                     """, (
-                        code, name, instructor_in.text().strip(), contact_in.text().strip(),
+                        name, instructor_in.text().strip(), contact_in.text().strip(),
                         classroom_in.text().strip(), credit_in.value(), course_id
                     ))
                     conn.commit()
@@ -762,7 +1016,7 @@ class TimetableView(QWidget):
     def dialog_add_schedule(self):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT id, code, name, instructor, classroom FROM courses")
+            cur.execute("SELECT id, code, name, instructor, instructor_contact, classroom FROM courses")
             courses = cur.fetchall()
 
         if not courses:
@@ -785,11 +1039,13 @@ class TimetableView(QWidget):
         start_in = QLineEdit("09:30")
         end_in = QLineEdit("11:20")
         instructor_in = QLineEdit()
+        instructor_contact_in = QLineEdit()
         room_in = QLineEdit()
 
         def load_course_defaults(index):
             course = courses[index]
             instructor_in.setText(course["instructor"] or "")
+            instructor_contact_in.setText(course["instructor_contact"] or "")
             room_in.setText(course["classroom"] or "")
 
         c_box.currentIndexChanged.connect(load_course_defaults)
@@ -806,6 +1062,8 @@ class TimetableView(QWidget):
         lay.addWidget(room_in)
         lay.addWidget(QLabel("Öğretim Görevlisi:"))
         lay.addWidget(instructor_in)
+        lay.addWidget(QLabel("Hoca İletişim Bilgileri:"))
+        lay.addWidget(instructor_contact_in)
 
         btn_save = QPushButton("Ekle")
         btn_save.setObjectName("AccentButton")
@@ -817,10 +1075,10 @@ class TimetableView(QWidget):
                 cur = conn.cursor()
                 cur.execute("""
                     INSERT INTO timetable
-                        (course_id, day_of_week, start_time, end_time, instructor, classroom)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (course_id, day_of_week, start_time, end_time, instructor, instructor_contact, classroom)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (c_box.currentData(), day_box.currentData(), start_in.text().strip(),
-                      end_in.text().strip(), instructor_in.text().strip(), room_in.text().strip()))
+                      end_in.text().strip(), instructor_in.text().strip(), instructor_contact_in.text().strip(), room_in.text().strip()))
                 conn.commit()
             play_action_sound("save")
             dlg.accept()

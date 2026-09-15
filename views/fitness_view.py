@@ -4,8 +4,8 @@ from PySide6.QtWidgets import (
     QDialog, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox,
     QMessageBox, QFrame, QScrollArea, QSplitter, QProgressBar
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QCursor
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QCursor, QDesktopServices
 
 from core.events import bus
 from core.sound import play_action_sound
@@ -194,6 +194,14 @@ class ExerciseRowCard(QFrame):
         layout.addWidget(badge_sets)
         layout.addWidget(badge_reps)
         layout.addWidget(badge_weight)
+
+        video_url = (self.data.get("video_url") or "").strip()
+        if video_url:
+            btn_video = QPushButton("Videoyu Aç")
+            btn_video.setCursor(QCursor(Qt.PointingHandCursor))
+            btn_video.setStyleSheet("background-color: #0f766e; color: white; border-radius: 4px; padding: 4px 10px; font-size: 12px;")
+            btn_video.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(video_url)))
+            layout.addWidget(btn_video)
 
         btn_edit = QPushButton("Düzenle")
         btn_edit.setCursor(QCursor(Qt.PointingHandCursor))
@@ -472,7 +480,7 @@ class FitnessView(QWidget):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
-                SELECT id, day_of_week, exercise_name, sets, reps, weight 
+                SELECT id, day_of_week, exercise_name, sets, reps, weight, video_url
                 FROM workout_exercises 
                 WHERE day_of_week = ?
                 ORDER BY id ASC
@@ -501,7 +509,7 @@ class FitnessView(QWidget):
         is_edit = ex_data is not None
         dlg = QDialog(self)
         dlg.setWindowTitle("Egzersizi Düzenle" if is_edit else f"Yeni Hareket Ekle — {DAYS_TR[self.selected_dow]}")
-        dlg.resize(320, 240)
+        dlg.resize(420, 280)
         lay = QVBoxLayout(dlg)
 
         name_in = QLineEdit()
@@ -510,18 +518,23 @@ class FitnessView(QWidget):
         sets_in = QSpinBox(); sets_in.setRange(1, 20); sets_in.setValue(4); sets_in.setPrefix("Set: ")
         reps_in = QSpinBox(); reps_in.setRange(1, 100); reps_in.setValue(10); reps_in.setPrefix("Tekrar: ")
         weight_in = QDoubleSpinBox(); weight_in.setRange(0, 500); weight_in.setValue(20.0); weight_in.setPrefix("Ağırlık: "); weight_in.setSuffix(" kg")
+        video_in = QLineEdit()
+        video_in.setPlaceholderText("Video bağlantısı (YouTube vb.)")
 
         if is_edit:
             name_in.setText(ex_data["exercise_name"])
             sets_in.setValue(ex_data["sets"])
             reps_in.setValue(ex_data["reps"])
             weight_in.setValue(ex_data["weight"])
+            video_in.setText(ex_data.get("video_url") or "")
 
         lay.addWidget(QLabel("Hareket:"))
         lay.addWidget(name_in)
         lay.addWidget(sets_in)
         lay.addWidget(reps_in)
         lay.addWidget(weight_in)
+        lay.addWidget(QLabel("Hareket videosu:"))
+        lay.addWidget(video_in)
 
         btn_save = QPushButton("Güncelle" if is_edit else "Kaydet")
         btn_save.setObjectName("AccentButton")
@@ -531,19 +544,23 @@ class FitnessView(QWidget):
             name_text = name_in.text().strip()
             if not name_text:
                 return
+            video_url = video_in.text().strip()
+            if video_url and not QUrl(video_url).isValid():
+                QMessageBox.warning(dlg, "Geçersiz bağlantı", "Lütfen geçerli bir video bağlantısı girin.")
+                return
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
                 if is_edit:
                     cur.execute("""
                         UPDATE workout_exercises 
-                        SET exercise_name = ?, sets = ?, reps = ?, weight = ?
+                        SET exercise_name = ?, sets = ?, reps = ?, weight = ?, video_url = ?
                         WHERE id = ?
-                    """, (name_text, sets_in.value(), reps_in.value(), weight_in.value(), ex_data["id"]))
+                    """, (name_text, sets_in.value(), reps_in.value(), weight_in.value(), video_url, ex_data["id"]))
                 else:
                     cur.execute("""
-                        INSERT INTO workout_exercises (day_of_week, exercise_name, sets, reps, weight)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (self.selected_dow, name_text, sets_in.value(), reps_in.value(), weight_in.value()))
+                        INSERT INTO workout_exercises (day_of_week, exercise_name, sets, reps, weight, video_url)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (self.selected_dow, name_text, sets_in.value(), reps_in.value(), weight_in.value(), video_url))
                 conn.commit()
                 
             play_action_sound("save") # YENİ EGZERSİZ KAYDEDİLDİ SESİ

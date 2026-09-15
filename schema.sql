@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS workout_exercises (
     sets INTEGER NOT NULL,
     reps INTEGER NOT NULL,
     target_weight REAL,           -- Hedef ağırlık (kg)
-    rest_seconds INTEGER DEFAULT 60
+    rest_seconds INTEGER DEFAULT 60,
+    video_url TEXT
 );
 
 CREATE TABLE IF NOT EXISTS workout_logs (

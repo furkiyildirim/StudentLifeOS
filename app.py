@@ -540,7 +540,7 @@ class SettingsView(QWidget):
         
         # 81 İli barındıran hazır liste
         cities = [
-            "Otomatik Konum", "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir",
+            "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir",
             "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli",
             "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari",
             "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir",
@@ -555,8 +555,10 @@ class SettingsView(QWidget):
         self.city_combo.setStyleSheet("background-color: #27272a; border-radius: 6px; padding: 8px; color: white; border: 1px solid #3f3f46;")
         
         # Kayıtlı şehri yükle
-        curr_city = self.get_db_setting('weather_city', 'Otomatik Konum')
-        if curr_city == '1': curr_city = 'Otomatik Konum'
+        curr_city = self.get_db_setting('weather_city', 'İstanbul')
+        if curr_city in ('1', '', 'Otomatik Konum'):
+            curr_city = 'İstanbul'
+            self.set_db_setting('weather_city', curr_city)
         self.city_combo.setCurrentText(curr_city)
 
         btn_save_w = QPushButton("Kaydet")
@@ -724,25 +726,81 @@ class SettingsView(QWidget):
         for cb in self.sound_combos:
             cb.setEnabled(enabled)
 
+    def logout_web_profiles(self):
+        main_window = self.main_window
+        active_profiles = []
+
+        for view, profile_names in (
+            (main_window, ("yt_profile",)),
+            (getattr(main_window, "university_view", None), ("obs_profile", "mail_profile")),
+        ):
+            if view:
+                for profile_name in profile_names:
+                    profile = getattr(view, profile_name, None)
+                    if profile:
+                        active_profiles.append(profile)
+
+        for profile in active_profiles:
+            profile.cookieStore().deleteAllCookies()
+            profile.clearHttpCache()
+            profile.clearAllVisitedLinks()
+
+        for view, webview_names in (
+            (main_window, ("yt_webview",)),
+            (getattr(main_window, "university_view", None), ("obs_webview", "mail_webview")),
+        ):
+            if view:
+                for webview_name in webview_names:
+                    webview = getattr(view, webview_name, None)
+                    if webview:
+                        webview.setUrl(QUrl("about:blank"))
+
+        profiles_dir = os.path.join(os.getcwd(), "vault_storage")
+        if os.path.isdir(profiles_dir):
+            for entry in os.listdir(profiles_dir):
+                if entry.endswith("_profile"):
+                    shutil.rmtree(os.path.join(profiles_dir, entry), ignore_errors=True)
+
     def perform_factory_reset(self):
         reply = QMessageBox.warning(
-            self, "DİKKAT", "Tüm verileriniz silinecektir! Emin misiniz?",
+            self, "DİKKAT",
+            "Tüm verileriniz ve giriş yapılan hesaplar silinecek. Bu işlem geri alınamaz. Emin misiniz?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-        if reply == QMessageBox.Yes:
+        if reply != QMessageBox.Yes:
+            return
+
+        with self.main_window.db.get_connection() as conn:
+            cur = conn.cursor()
             tables = [
-                "todo_tasks", "calendar_events", "calendar_completions", 
-                "timetable", "courses", "assessments", "notes", 
-                "materials", "habits", "habit_logs", "workout_exercises",
-                "projects", "project_tasks"
+                row[0] for row in cur.execute("""
+                    SELECT name FROM sqlite_master
+                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                """).fetchall()
             ]
-            with self.main_window.db.get_connection() as conn:
-                cur = conn.cursor()
-                for t in tables:
-                    try: cur.execute(f"DELETE FROM {t}")
-                    except: pass
-                conn.commit()
-            QMessageBox.information(self, "Başarılı", "Sistem sıfırlandı.")
+            cur.execute("PRAGMA foreign_keys = OFF")
+            for table in tables:
+                cur.execute(f'DELETE FROM "{table.replace(chr(34), chr(34) * 2)}"')
+            cur.execute("PRAGMA foreign_keys = ON")
+            conn.commit()
+
+        self.logout_web_profiles()
+        self.main_window.setup_database_settings()
+        project_view = getattr(self.main_window, "project_view", None)
+        if project_view:
+            project_view.active_project_id = None
+            project_view.project_list.clear()
+            project_view.task_list.clear()
+            project_view.title_edit.clear()
+            project_view.notes_edit.clear()
+            project_view.enable_right_panel(False)
+        bus.courses_changed.emit()
+        bus.assessments_changed.emit()
+        bus.habits_changed.emit()
+        bus.workouts_changed.emit()
+        bus.calendar_changed.emit()
+        bus.notes_changed.emit()
+        QMessageBox.information(self, "Başarılı", "Sistem sıfırlandı. Tüm hesaplardan çıkış yapıldı.")
 
 class MainWindow(QMainWindow):
     def __init__(self, start_hidden=False):
@@ -829,9 +887,13 @@ class MainWindow(QMainWindow):
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('notif_classes_time', '15')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('notif_plans', '1')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('notif_plans_time', '15')")
+            cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('semester_start_date', '')")
+            cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('semester_end_date', '')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sound_classes', 'Varsayılan (Windows)')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sound_plans', 'Varsayılan (Windows)')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('sound_pomodoro', 'Varsayılan (Windows)')")
+            cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('weather_city', 'İstanbul')")
+            cur.execute("UPDATE app_settings SET setting_value = 'İstanbul' WHERE setting_key = 'weather_city' AND setting_value IN ('1', '', 'Otomatik Konum')")
             conn.commit()
 
     def setup_system_tray(self):
