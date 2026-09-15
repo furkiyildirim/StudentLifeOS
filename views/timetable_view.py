@@ -544,9 +544,7 @@ class TimetableView(QWidget):
             cur.execute("""
                   SELECT t.id, t.day_of_week, t.start_time, t.end_time,
                       c.code, c.name,
-                      COALESCE(t.instructor, c.instructor) AS instructor,
-                      COALESCE(t.instructor_contact, c.instructor_contact) AS instructor_contact,
-                      COALESCE(t.classroom, c.classroom) AS classroom,
+                      t.instructor, t.instructor_contact, t.classroom,
                       c.color_hex, t.course_id
                 FROM timetable t
                 JOIN courses c ON t.course_id = c.id
@@ -598,9 +596,7 @@ class TimetableView(QWidget):
             slot = conn.execute("""
                 SELECT t.id, t.day_of_week, t.start_time, t.end_time,
                        c.code, c.name,
-                       COALESCE(t.instructor, c.instructor) AS instructor,
-                       COALESCE(t.instructor_contact, c.instructor_contact) AS instructor_contact,
-                       COALESCE(t.classroom, c.classroom) AS classroom,
+                       t.instructor, t.instructor_contact, t.classroom,
                        c.color_hex, t.course_id
                 FROM timetable t
                 JOIN courses c ON t.course_id = c.id
@@ -647,7 +643,7 @@ class TimetableView(QWidget):
                         "instructor": slot["instructor"] or "",
                         "instructor_contact": slot["instructor_contact"] or ""
                     })
-                    item.tableWidget().viewport().update()
+                    self.table.viewport().update()
                     return
 
         self.load_schedule()
@@ -779,9 +775,9 @@ class TimetableView(QWidget):
         if not course:
             return
 
-        slot_instructor = (slot["instructor"] if slot and slot["instructor"] else course["instructor"]) or "Belirtilmemiş"
-        slot_contact = (slot["instructor_contact"] if slot and slot["instructor_contact"] else course["instructor_contact"]) or "Belirtilmemiş"
-        slot_classroom = (slot["classroom"] if slot and slot["classroom"] else course["classroom"]) or "Belirtilmemiş"
+        slot_instructor = (slot["instructor"] if slot else None) or "Belirtilmemiş"
+        slot_contact = (slot["instructor_contact"] if slot else None) or "Belirtilmemiş"
+        slot_classroom = (slot["classroom"] if slot else None) or "Belirtilmemiş"
 
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Ders Detayları - {course['code']}")
@@ -855,7 +851,7 @@ class TimetableView(QWidget):
 
         def edit_course():
             dlg.accept()
-            self.dialog_edit_course(slot_data["course_id"])
+            self.dialog_edit_slot(slot_data)
 
         def delete_course():
             dlg.reject()
