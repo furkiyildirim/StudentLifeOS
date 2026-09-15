@@ -34,29 +34,64 @@ def get_system_prompt(db):
         f"Hafıza: {mem}\n"
         "Yanıtlarını gereksiz uzatmadan, net ve arkadaşça ver. Kullanıcı açıkça istediğinde veya işlem veritabanını değiştirecekse ilgili aracı mutlaka kullan. "
         "To-do, kişisel plan, ders, sınav, alışkanlık, antrenman, not ve proje kayıtlarını oluşturabilir, güncelleyebilir, tamamlayabilir ve silebilirsin. "
+        "To-do görevlerinde önce get_todos ile ID, öncelik ve durumu kontrol et; güncelleme için update_todo kullan ve önceliği Düşük, Normal veya Yüksek olarak belirt. "
         "Projelerde durum değiştirme, proje tamamlama ve alt görev tamamlama işlemlerini de yapabilirsin. "
         "Silme veya büyük değişikliklerde hangi kaydı etkileyeceğini doğrula; kullanıcı istemeden kayıt silme."
     )
 
 def get_database_tools(db):
     def get_todos() -> str:
-        """Bekleyen görevleri listele."""
+        """To-do görevlerini ID, durum ve öncelikleriyle listele."""
         try:
             with db.get_connection() as c:
-                return ",".join([r['title'] for r in c.execute("SELECT title FROM todo_tasks WHERE is_completed=0").fetchall()]) or "Yok"
+                rows = c.execute(
+                    "SELECT id, title, priority, is_completed FROM todo_tasks ORDER BY is_completed ASC, id DESC"
+                ).fetchall()
+                return ", ".join(
+                    f"ID:{r['id']} {r['title']} (öncelik:{r['priority'] or 'Normal'}, "
+                    f"durum:{'tamamlandı' if r['is_completed'] else 'bekliyor'})"
+                    for r in rows
+                ) or "Yok"
         except Exception as e: return str(e)
 
-    def add_todo(title: str) -> str:
-        """To-Do listesine görev ekle."""
+    def add_todo(title: str, priority: str = "Normal") -> str:
+        """To-do listesine görev ekle. Öncelik: Düşük, Normal veya Yüksek."""
         try:
+            priority = priority if priority in ("Düşük", "Normal", "Yüksek") else "Normal"
             with db.get_connection() as c:
-                try:
-                    c.execute("INSERT INTO todo_tasks (title, category, priority, is_completed) VALUES (?, 'Genel', 'Orta', 0)", (title,))
-                except:
-                    c.execute("INSERT INTO todo_tasks (title, is_completed) VALUES (?, 0)", (title,))
+                c.execute("INSERT INTO todo_tasks (title, priority, is_completed) VALUES (?, ?, 0)", (title.strip(), priority))
                 c.commit()
             _emit_changed(bus.todo_changed)
             return "Eklendi"
+        except Exception as e: return str(e)
+
+    def update_todo(task_id: int, title: str = None, priority: str = None,
+                    is_completed: bool = None) -> str:
+        """To-do görevini ID ile güncelle; başlık, öncelik veya tamamlanma durumunu değiştirebilir."""
+        try:
+            updates = []
+            values = []
+            if title is not None:
+                updates.append("title = ?")
+                values.append(title.strip())
+            if priority is not None:
+                if priority not in ("Düşük", "Normal", "Yüksek"):
+                    return "Geçersiz öncelik. Düşük, Normal veya Yüksek kullanın"
+                updates.append("priority = ?")
+                values.append(priority)
+            if is_completed is not None:
+                updates.append("is_completed = ?")
+                values.append(int(bool(is_completed)))
+            if not updates:
+                return "Güncellenecek bilgi verilmedi"
+            values.append(int(float(task_id)))
+            with db.get_connection() as c:
+                cursor = c.execute(f"UPDATE todo_tasks SET {', '.join(updates)} WHERE id = ?", values)
+                c.commit()
+            if cursor.rowcount == 0:
+                return "Görev bulunamadı"
+            _emit_changed(bus.todo_changed)
+            return "Görev güncellendi"
         except Exception as e: return str(e)
 
     def complete_todo(title: str) -> str:
@@ -505,7 +540,7 @@ def get_database_tools(db):
         except Exception as e: return str(e)
 
     return [
-        get_todos, add_todo, complete_todo, delete_todo,
+        get_todos, add_todo, update_todo, complete_todo, delete_todo,
         get_events, add_event, update_event, complete_event, delete_event,
         get_notes, add_note, delete_note,
         get_schedule, get_courses, update_course, add_course, delete_course,

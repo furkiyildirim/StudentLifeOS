@@ -290,10 +290,15 @@ class MusicView(QWidget):
         self.playlists_view.setViewMode(QListWidget.IconMode)
         self.playlists_view.setFlow(QListWidget.LeftToRight)
         self.playlists_view.setWrapping(False) 
-        self.playlists_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.playlists_view.setDragDropMode(QListWidget.NoDragDrop)
+        self.playlists_view.setDragEnabled(False)
+        self.playlists_view.setAcceptDrops(False)
+        self.playlists_view.setDropIndicatorShown(False)
+        self.playlists_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.playlists_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.playlists_view.setIconSize(QSize(100, 100))
-        self.playlists_view.setFixedHeight(150)
+        self.playlists_view.setGridSize(QSize(132, 138))
+        self.playlists_view.setFixedHeight(170)
         self.playlists_view.setSpacing(15)
         self.playlists_view.setStyleSheet("""
             QListWidget { background: transparent; border: none; outline: none; }
@@ -306,7 +311,11 @@ class MusicView(QWidget):
 
         # Şarkı Listesi
         self.playlist_widget = QListWidget()
-        self.playlist_widget.setDragDropMode(QListWidget.InternalMove)
+        self.playlist_widget.setDragDropMode(QListWidget.NoDragDrop)
+        self.playlist_widget.setDragEnabled(False)
+        self.playlist_widget.setAcceptDrops(False)
+        self.playlist_widget.setDropIndicatorShown(False)
+        self.playlist_widget.setSpacing(2)
         self.playlist_widget.setContextMenuPolicy(Qt.CustomContextMenu)
         self.playlist_widget.customContextMenuRequested.connect(self.show_context_menu)
         self.playlist_widget.setStyleSheet("""

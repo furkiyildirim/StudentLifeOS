@@ -3,10 +3,10 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QPushButton, QDialog, QLineEdit, QComboBox,
     QSpinBox, QDoubleSpinBox, QMessageBox, QHeaderView, QTabWidget,
     QFrame, QScrollArea, QAbstractItemView, QMenu, QStyledItemDelegate, QStyle,
-    QDateEdit, QGridLayout
+    QDateEdit, QGridLayout, QDateTimeEdit, QCalendarWidget
 )
 from PySide6.QtGui import QCursor, QColor, QDrag, QBrush
-from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer, QDate
+from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer, QDate, QDateTime, QLocale
 from PySide6.QtGui import QCursor, QColor, QDrag
 from core.sound import play_action_sound
 from core.events import bus
@@ -336,14 +336,59 @@ class TimetableView(QWidget):
 
         # Üst Araç Çubuğu
         top_bar = QHBoxLayout()
-        btn_add_course = QPushButton("+ Yeni Ders Tanımla")
-        btn_add_course.setObjectName("AccentButton")
+        btn_add_course = QPushButton("🎓  Yeni Ders Tanımla")
+        btn_add_course.setObjectName("PrimaryCourseButton")
+        btn_add_course.setMinimumHeight(42)
+        btn_add_course.setMinimumWidth(190)
         btn_add_course.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_add_course.setStyleSheet("""
+            QPushButton#PrimaryCourseButton {
+                background-color: #38bdf8;
+                color: #082f49;
+                border: 1px solid #7dd3fc;
+                border-radius: 9px;
+                padding: 9px 18px;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QPushButton#PrimaryCourseButton:hover {
+                background-color: #7dd3fc;
+                border-color: #bae6fd;
+            }
+            QPushButton#PrimaryCourseButton:pressed {
+                background-color: #0ea5e9;
+                padding-top: 11px;
+                padding-bottom: 7px;
+            }
+        """)
         btn_add_course.clicked.connect(self.dialog_add_course)
 
-        btn_add_slot = QPushButton("+ Çizelgeye Saat Ekle")
+        btn_add_slot = QPushButton("🕒  Çizelgeye Ders Saati Ekle")
+        btn_add_slot.setObjectName("SecondaryScheduleButton")
+        btn_add_slot.setMinimumHeight(42)
+        btn_add_slot.setMinimumWidth(220)
         btn_add_slot.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_add_slot.setStyleSheet("background-color: #1c1917; border: 1px solid #292524; color: #f4f4f5; border-radius: 6px; padding: 7px 14px; font-weight: 600;")
+        btn_add_slot.setStyleSheet("""
+            QPushButton#SecondaryScheduleButton {
+                background-color: #14532d;
+                color: #dcfce7;
+                border: 1px solid #22c55e;
+                border-radius: 9px;
+                padding: 9px 16px;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QPushButton#SecondaryScheduleButton:hover {
+                background-color: #166534;
+                border-color: #4ade80;
+                color: #f0fdf4;
+            }
+            QPushButton#SecondaryScheduleButton:pressed {
+                background-color: #15803d;
+                padding-top: 11px;
+                padding-bottom: 7px;
+            }
+        """)
         btn_add_slot.clicked.connect(self.dialog_add_schedule)
 
         info_lbl = QLabel("💡 İpucu: Dersi başka bir güne sürükleyip bırakabilir veya sağ tıklayarak güncelleyebilirsiniz.")
@@ -352,13 +397,27 @@ class TimetableView(QWidget):
         self.semester_start_edit = QDateEdit()
         self.semester_start_edit.setCalendarPopup(True)
         self.semester_start_edit.setDisplayFormat("dd.MM.yyyy")
-        self.semester_start_edit.setStyleSheet("background-color: #1c1917; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px;")
+        self.semester_start_edit.setMinimumWidth(135)
+        self.configure_date_edit(self.semester_start_edit)
+        self.semester_start_edit.setStyleSheet("""
+            QDateEdit { background: #18151f; color: #f5f3ff; border: 1px solid #8b5cf6; border-radius: 8px; padding: 7px 8px; font-weight: 700; }
+            QDateEdit:focus { border: 2px solid #c4b5fd; }
+            QDateEdit::down-button { width: 30px; background: #6d28d9; border-left: 1px solid #8b5cf6; border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
+            QDateEdit::down-button:hover { background: #7c3aed; }
+        """)
         self.semester_start_edit.dateChanged.connect(self.save_semester_start_date)
 
         self.semester_end_edit = QDateEdit()
         self.semester_end_edit.setCalendarPopup(True)
         self.semester_end_edit.setDisplayFormat("dd.MM.yyyy")
-        self.semester_end_edit.setStyleSheet("background-color: #1c1917; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 5px 8px;")
+        self.semester_end_edit.setMinimumWidth(135)
+        self.configure_date_edit(self.semester_end_edit)
+        self.semester_end_edit.setStyleSheet("""
+            QDateEdit { background: #18151f; color: #f5f3ff; border: 1px solid #8b5cf6; border-radius: 8px; padding: 7px 8px; font-weight: 700; }
+            QDateEdit:focus { border: 2px solid #c4b5fd; }
+            QDateEdit::down-button { width: 30px; background: #6d28d9; border-left: 1px solid #8b5cf6; border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
+            QDateEdit::down-button:hover { background: #7c3aed; }
+        """)
         self.semester_end_edit.dateChanged.connect(self.save_semester_end_date)
 
         self.semester_warning = QLabel()
@@ -450,6 +509,21 @@ class TimetableView(QWidget):
                 WHERE app_settings.setting_value IS NULL OR app_settings.setting_value = ''
             """, (default_end,))
             conn.commit()
+
+    def configure_date_edit(self, date_edit):
+        turkish_locale = QLocale(QLocale.Turkish, QLocale.Turkey)
+        date_edit.setLocale(turkish_locale)
+        calendar = date_edit.calendarWidget()
+        calendar.setLocale(turkish_locale)
+        calendar.setFirstDayOfWeek(Qt.Monday)
+        calendar.setGridVisible(True)
+        calendar.setStyleSheet("""
+            QCalendarWidget { background: #18181b; color: #f4f4f5; }
+            QCalendarWidget QToolButton { color: #f4f4f5; background: #27272a; border: none; padding: 6px; font-weight: 700; }
+            QCalendarWidget QToolButton:hover { background: #3f3f46; }
+            QCalendarWidget QSpinBox { color: #f4f4f5; background: #27272a; }
+            QCalendarWidget QAbstractItemView { selection-background-color: #0ea5e9; selection-color: white; }
+        """)
 
     def _get_semester_start_date(self):
         with self.db.get_connection() as conn:
@@ -1128,9 +1202,30 @@ class TimetableView(QWidget):
         self.lbl_letter = QLabel("Harf Notu: -")
         self.lbl_letter.setStyleSheet("font-size: 14px; font-weight: 700; color: #10b981; margin-left: 16px;")
 
-        btn_add_assessment = QPushButton("+ Yeni Sınav / Değerlendirme")
-        btn_add_assessment.setObjectName("AccentButton")
+        btn_add_assessment = QPushButton("📅  Yeni Sınav / Değerlendirme")
+        btn_add_assessment.setObjectName("AssessmentAddButton")
+        btn_add_assessment.setMinimumSize(225, 42)
         btn_add_assessment.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_add_assessment.setStyleSheet("""
+            QPushButton#AssessmentAddButton {
+                background-color: #9a3412;
+                color: #fff7ed;
+                border: 1px solid #fb923c;
+                border-radius: 9px;
+                padding: 9px 16px;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QPushButton#AssessmentAddButton:hover {
+                background-color: #c2410c;
+                border-color: #fdba74;
+            }
+            QPushButton#AssessmentAddButton:pressed {
+                background-color: #7c2d12;
+                padding-top: 11px;
+                padding-bottom: 7px;
+            }
+        """)
         btn_add_assessment.clicked.connect(self.dialog_add_assessment)
 
         sum_lay.addWidget(self.lbl_gpa)
@@ -1262,8 +1357,11 @@ class TimetableView(QWidget):
         weight_in.setValue(40.0)
         weight_in.setPrefix("Ağırlık: %")
 
-        date_in = QLineEdit("2026-11-20 10:00")
-        date_in.setPlaceholderText("YYYY-AA-GG SS:DD")
+        date_in = QDateTimeEdit(QDateTime.currentDateTime().addDays(7))
+        date_in.setCalendarPopup(True)
+        date_in.setDisplayFormat("dd.MM.yyyy HH:mm")
+        date_in.setMinimumWidth(180)
+        self.configure_date_edit(date_in)
 
         lay.addWidget(QLabel("Ders:"))
         lay.addWidget(c_box)
@@ -1286,7 +1384,7 @@ class TimetableView(QWidget):
                 cur.execute("""
                     INSERT INTO assessments (course_id, title, weight, due_date)
                     VALUES (?, ?, ?, ?)
-                """, (c_box.currentData(), t, weight_in.value(), date_in.text().strip()))
+                """, (c_box.currentData(), t, weight_in.value(), date_in.dateTime().toString("yyyy-MM-dd HH:mm")))
                 conn.commit()
 
             dlg.accept()

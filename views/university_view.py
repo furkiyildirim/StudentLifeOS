@@ -31,12 +31,43 @@ class UniversityView(QWidget):
             "Gazi Üniversitesi": "https://obs.gazi.edu.tr/",
             "Yıldız Teknik Üniversitesi": "https://obs.yildiz.edu.tr/",
             "Ege Üniversitesi": "https://kimlik.ege.edu.tr/",
+            "İstanbul Üniversitesi (ÖYS/OBS)": "https://obis.istanbul.edu.tr/",
+            "Marmara Üniversitesi": "https://bys.marmara.edu.tr/",
+            "Dokuz Eylül Üniversitesi": "https://debis.deu.edu.tr/",
+            "Akdeniz Üniversitesi": "https://obs.akdeniz.edu.tr/",
+            "Erciyes Üniversitesi": "https://obisis.erciyes.edu.tr/",
+            "Selçuk Üniversitesi": "https://aes.selcuk.edu.tr/",
+            "Çukurova Üniversitesi": "https://obs.cu.edu.tr/",
+            "Karadeniz Teknik Üniversitesi": "https://bys.ktu.edu.tr/",
+            "Sakarya Üniversitesi": "https://sabis.sakarya.edu.tr/",
+            "Eskişehir Osmangazi Üniversitesi": "https://oibs.ogu.edu.tr/",
+            "Anadolu Üniversitesi": "https://aosogrenci.anadolu.edu.tr/",
+            "Atatürk Üniversitesi": "https://obs.atauni.edu.tr/",
+            "İnönü Üniversitesi": "https://obs.inonu.edu.tr/",
+            "Fırat Üniversitesi": "https://obs.firat.edu.tr/",
+            "Kocaeli Üniversitesi": "https://odb.kocaeli.edu.tr/",
+            "Bursa Uludağ Üniversitesi": "https://ukey.uludag.edu.tr/",
+            "Bilkent Üniversitesi": "https://stars.bilkent.edu.tr/",
+            "Sabancı Üniversitesi": "https://bannerweb.sabanciuniv.edu/",
             "Farklı Bir Üniversite (URL Girin)": "https://"
         }
 
         self.mail_list = {
             "Microsoft Outlook (Üniversitelerin Çoğu)": "https://outlook.office365.com/mail/",
             "Google Workspace (Öğrenci Gmail)": "https://mail.google.com/",
+            "İTÜ Öğrenci E-Posta": "https://webmail.itu.edu.tr/",
+            "ODTÜ Öğrenci E-Posta": "https://mail.metu.edu.tr/",
+            "Boğaziçi Üniversitesi E-Posta": "https://mail.bogazici.edu.tr/",
+            "Hacettepe Üniversitesi E-Posta": "https://mail.hacettepe.edu.tr/",
+            "Ankara Üniversitesi E-Posta": "https://mail.ankara.edu.tr/",
+            "İstanbul Üniversitesi E-Posta": "https://mail.istanbul.edu.tr/",
+            "Marmara Üniversitesi E-Posta": "https://posta.marmara.edu.tr/",
+            "Yıldız Teknik Üniversitesi E-Posta": "https://mail.yildiz.edu.tr/",
+            "Ege Üniversitesi E-Posta": "https://mail.ege.edu.tr/",
+            "Erciyes Üniversitesi E-Posta": "https://mail.erciyes.edu.tr/",
+            "Kocaeli Üniversitesi E-Posta": "https://mail.kocaeli.edu.tr/",
+            "Zoho Mail": "https://mail.zoho.com/",
+            "Proton Mail": "https://mail.proton.me/",
             "Farklı Webmail (URL Girin)": "https://"
         }
 

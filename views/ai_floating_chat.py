@@ -203,6 +203,7 @@ class AIChatWindow(QFrame):
         self._load_conversation_history()
         bus.ai_settings_changed.connect(self.refresh_credentials)
         if QApplication.instance():
+            QApplication.instance().aboutToQuit.connect(self.clear_conversation_history)
             QApplication.instance().aboutToQuit.connect(self.shutdown_workers)
 
     def init_ui(self):
@@ -245,10 +246,20 @@ class AIChatWindow(QFrame):
         layout.addWidget(self.chat_display)
 
         self.lbl_typing = QLabel("")
-        self.lbl_typing.setStyleSheet("color: #3b82f6; font-size: 12px; font-style: italic; border: none;") 
+        self.lbl_typing.setStyleSheet("color: #3b82f6; font-size: 12px; font-style: italic; border: none;")
         self.lbl_typing.hide()
-        self.lbl_typing.setParent(self.chat_display)
-        self.lbl_typing.setStyleSheet("background-color: #27272a; color: #7dd3fc; border-radius: 8px; padding: 5px 9px; font-size: 12px; font-style: italic;")
+        self.lbl_typing.setParent(self.chat_display.viewport())
+        self.lbl_typing.setStyleSheet("""
+            QLabel {
+                background-color: #27272a;
+                color: #7dd3fc;
+                border: 1px solid #3f3f46;
+                border-radius: 10px;
+                padding: 6px 10px;
+                font-size: 12px;
+                font-style: italic;
+            }
+        """)
         
         self.typing_timer = QTimer(self)
         self.typing_timer.timeout.connect(self.update_typing)
@@ -324,6 +335,16 @@ class AIChatWindow(QFrame):
         except Exception:
             pass
 
+    def clear_conversation_history(self):
+        """Uygulama tamamen kapanırken kalıcı sohbet geçmişini temizle."""
+        try:
+            with self.db.get_connection() as conn:
+                conn.execute("DELETE FROM app_settings WHERE setting_key LIKE 'ai_chat_history_%'")
+                conn.commit()
+        except Exception:
+            pass
+        self.conversation_history.clear()
+
     def render_conversation(self):
         self.chat_display.clear()
         if not self.conversation_history:
@@ -347,7 +368,8 @@ class AIChatWindow(QFrame):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.lbl_typing.adjustSize()
-        self.lbl_typing.move(26, self.chat_display.height() - self.lbl_typing.height() - 18)
+        viewport = self.chat_display.viewport()
+        self.lbl_typing.move(14, viewport.height() - self.lbl_typing.height() - 12)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -415,7 +437,10 @@ class AIChatWindow(QFrame):
 
     def update_typing(self):
         self.typing_dots = (self.typing_dots + 1) % 4
-        self.lbl_typing.setText(f"{self.model_combo.currentText().split(' ')[0]} yazıyor{'.' * self.typing_dots}")
+        self.lbl_typing.setText(f"🧠 Student Life AI yazıyor{'.' * self.typing_dots}")
+        self.lbl_typing.adjustSize()
+        viewport = self.chat_display.viewport()
+        self.lbl_typing.move(14, viewport.height() - self.lbl_typing.height() - 12)
 
     def show_local_model_missing(self):
         self.chat_display.clear()
@@ -649,10 +674,53 @@ class AIChatWindow(QFrame):
         self.typing_timer.stop()
         self.lbl_typing.hide()
         self.btn_stop.hide()
-        
-        self.chat_display.append(f"<br><span style='color:#ef4444;'><b>Hata:</b> {error_msg}</span>")
-        self.input_field.setEnabled(True)
-        self.btn_send.setEnabled(True)
+
+        provider = self.model_combo.currentText().split(" ")[0]
+        raw_error = str(error_msg or "")
+        lowered_error = raw_error.lower()
+        rate_limit_error = any(token in lowered_error for token in (
+            "429", "rate limit", "rate_limit", "quota", "resource exhausted",
+            "too many requests", "token limit", "token quota", "usage limit"
+        ))
+        key_error = any(token in lowered_error for token in (
+            "api key", "api_key", "api anaht", "unauthenticated", "authentication",
+            "permission denied", "401", "403", "invalid argument"
+        ))
+
+        if rate_limit_error:
+            message = (
+                f"⏳ <b>{provider} kullanım/token hakkı dolmuş olabilir.</b><br>"
+                "İstek limiti (429) aşıldı. Kota yenilenene kadar bekleyin veya "
+                "sağlayıcının kullanım ve faturalandırma panelini kontrol edin."
+            )
+            self.input_field.setEnabled(True)
+            self.btn_send.setEnabled(True)
+        elif key_error:
+            message = (
+                f"🔐 <b>{provider} API anahtarı kabul edilmedi.</b><br>"
+                "Anahtar yanlış, süresi dolmuş veya bu model için yetkisiz olabilir.<br>"
+                "Ayarlar bölümünden anahtarı kontrol edip tekrar kaydedin."
+            )
+            self.input_field.setEnabled(False)
+            self.btn_send.setEnabled(False)
+        elif "offline" in lowered_error or "connection" in lowered_error or "timeout" in lowered_error:
+            message = (
+                "🌐 <b>AI servisine bağlanılamadı.</b><br>"
+                "İnternet bağlantınızı kontrol edip biraz sonra tekrar deneyin."
+            )
+            self.input_field.setEnabled(True)
+            self.btn_send.setEnabled(True)
+        else:
+            message = (
+                f"⚠️ <b>{provider} yanıt veremedi.</b><br>"
+                "İstek tamamlanamadı. Ayarları veya bağlantınızı kontrol edip tekrar deneyin."
+            )
+            self.input_field.setEnabled(True)
+            self.btn_send.setEnabled(True)
+
+        self.chat_display.append(
+            f"<p style='color:#fca5a5;'><b>🧠 Student Life AI</b><br>{message}</p>"
+        )
         self.scroll_to_bottom()
         
     def scroll_to_bottom(self):

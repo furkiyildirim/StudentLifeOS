@@ -14,8 +14,8 @@ from PySide6.QtWidgets import (
     QSizePolicy, QComboBox, QScrollArea, QListWidget, QListWidgetItem,
     QMessageBox, QLineEdit, QGroupBox, QFormLayout
 )
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QUrl, QVariantAnimation, QThread, Signal
-from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QAction, QColor
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QUrl, QVariantAnimation, QThread, Signal, QEvent, QSize
+from PySide6.QtGui import QCursor, QDesktopServices, QIcon, QAction, QColor, QPixmap, QMovie
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile, QWebEnginePage, QWebEngineSettings
 
@@ -121,7 +121,11 @@ QLabel { qproperty-wordWrap: 1; }
 #NavButton:hover { background-color: #191614; color: #fafaf9; }
 #NavButton:checked { background-color: #211d1a; color: #38bdf8; font-weight: 600; border-left: 3px solid #38bdf8; border-top-left-radius: 0px; border-bottom-left-radius: 0px; }
 #Card { background-color: #171412; border: 1px solid #292524; border-radius: 12px; padding: 16px; }
-#CardHeader { font-size: 15px; font-weight: 700; color: #ffffff; border-bottom: 1px solid #292524; padding-bottom: 8px; margin-bottom: 10px; }
+#CardHeader { qproperty-wordWrap: 0; background-color: #1c3042; border: 1px solid #2563eb; border-radius: 7px; font-size: 13px; font-weight: 800; color: #dbeafe; padding: 6px 8px; margin-bottom: 10px; }
+QMenu { background-color: #18181b; color: #f4f4f5; border: 1px solid #52525b; border-radius: 8px; padding: 5px; }
+QMenu::item { padding: 8px 24px; border-radius: 5px; }
+QMenu::item:selected { background-color: #3f3f46; color: #ffffff; }
+QComboBox QAbstractItemView { background-color: #18181b; color: #f4f4f5; border: 1px solid #52525b; selection-background-color: #3f3f46; selection-color: #ffffff; padding: 4px; outline: none; }
 """
 
 class NotificationPopup(QWidget):
@@ -257,20 +261,34 @@ class SplashScreen(QWidget):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SplashScreen)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(400, 220)
+        self.setFixedSize(440, 280)
 
         main_lay = QVBoxLayout(self)
         main_lay.setContentsMargins(0, 0, 0, 0)
 
         bg_frame = QFrame()
-        bg_frame.setStyleSheet("QFrame { background-color: #0c0a09; border: 2px solid #292524; border-radius: 12px; }")
+        bg_frame.setStyleSheet("QFrame { background-color: #000000; border: 1px solid #1e293b; border-radius: 12px; }")
         
         lay = QVBoxLayout(bg_frame)
-        lay.setContentsMargins(30, 40, 30, 30)
+        lay.setContentsMargins(30, 24, 30, 24)
 
-        brand = QLabel("⚡ STUDENT LIFE OS")
-        brand.setAlignment(Qt.AlignCenter)
-        brand.setStyleSheet("font-size: 26px; font-weight: 900; letter-spacing: 2px; color: #38bdf8; border: none;")
+        self.brand = QLabel("STUDENT LIFE OS")
+        self.brand.setWordWrap(False)
+        self.brand.setAlignment(Qt.AlignCenter)
+        self.brand.setStyleSheet("font-size: 25px; font-weight: 900; letter-spacing: 2px; color: #38bdf8; border: none;")
+
+        self.gif_label = QLabel()
+        self.gif_label.setFixedSize(76, 76)
+        self.gif_label.setAlignment(Qt.AlignCenter)
+        self.gif_label.setStyleSheet("background: transparent; border: none; padding: 0;")
+        gif_path = os.path.join("resources", "icons", "splash.gif")
+        if os.path.exists(gif_path):
+            self.splash_movie = QMovie(gif_path)
+            self.splash_movie.setScaledSize(QSize(112, 112))
+            self.gif_label.setMovie(self.splash_movie)
+            self.splash_movie.start()
+        else:
+            self.splash_movie = None
         
         version = QLabel("Başlatılıyor...")
         version.setAlignment(Qt.AlignCenter)
@@ -286,7 +304,9 @@ class SplashScreen(QWidget):
         self.progress.setStyleSheet("QProgressBar { background-color: #27272a; border-radius: 3px; border: none; } QProgressBar::chunk { background-color: #0284c7; border-radius: 3px; }")
 
         lay.addStretch()
-        lay.addWidget(brand)
+        lay.addWidget(self.gif_label, alignment=Qt.AlignCenter)
+        lay.addSpacing(8)
+        lay.addWidget(self.brand)
         lay.addWidget(version)
         lay.addSpacing(20)
         lay.addWidget(self.progress)
@@ -298,10 +318,17 @@ class SplashScreen(QWidget):
         self.counter = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.loading)
+        self.pulse = QPropertyAnimation(self.gif_label, b"windowOpacity", self)
+        self.pulse.setDuration(900)
+        self.pulse.setStartValue(0.72)
+        self.pulse.setEndValue(1.0)
+        self.pulse.setEasingCurve(QEasingCurve.InOutSine)
+        self.pulse.setLoopCount(-1)
 
     def start(self, callback):
         self.callback = callback
         self.show()
+        self.pulse.start()
         self.timer.start(15)
 
     def loading(self):
@@ -314,6 +341,9 @@ class SplashScreen(QWidget):
 
         if self.counter >= 100:
             self.timer.stop()
+            self.pulse.stop()
+            if self.splash_movie:
+                self.splash_movie.stop()
             self.close()
             try:
                 play_action_sound("startup")
@@ -781,7 +811,7 @@ class SettingsView(QWidget):
     def perform_factory_reset(self):
         reply = QMessageBox.warning(
             self, "DİKKAT",
-            "Tüm verileriniz ve giriş yapılan hesaplar silinecek. Bu işlem geri alınamaz. Emin misiniz?",
+            "Tüm görevler, dersler, planlar, projeler, notlar, ayarlar, sohbet geçmişi ve yerel müzik kayıtları silinecek. Bu işlem geri alınamaz. Emin misiniz?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply != QMessageBox.Yes:
@@ -802,21 +832,44 @@ class SettingsView(QWidget):
             conn.commit()
 
         self.logout_web_profiles()
+
+        for media_dir in ("resources/musics", "resources/covers"):
+            if os.path.isdir(media_dir):
+                for entry in os.listdir(media_dir):
+                    path = os.path.join(media_dir, entry)
+                    if os.path.isfile(path):
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
+
         self.main_window.setup_database_settings()
         project_view = getattr(self.main_window, "project_view", None)
         if project_view:
             project_view.active_project_id = None
+            project_view.active_task_id = None
+            project_view.load_projects()
             project_view.project_list.clear()
             project_view.task_list.clear()
             project_view.title_edit.clear()
             project_view.notes_edit.clear()
             project_view.enable_right_panel(False)
+        todo_view = getattr(self.main_window, "todo_view", None)
+        if todo_view:
+            todo_view.load_tasks()
+        music_view = getattr(self.main_window, "music_view", None)
+        if music_view:
+            music_view.player.stop()
+            music_view.load_playlists()
         bus.courses_changed.emit()
         bus.assessments_changed.emit()
         bus.habits_changed.emit()
         bus.workouts_changed.emit()
         bus.calendar_changed.emit()
         bus.notes_changed.emit()
+        bus.todo_changed.emit()
+        bus.projects_changed.emit()
+        bus.ai_settings_changed.emit()
         QMessageBox.information(self, "Başarılı", "Sistem sıfırlandı. Tüm hesaplardan çıkış yapıldı.")
 
 class MainWindow(QMainWindow):
@@ -866,8 +919,64 @@ class MainWindow(QMainWindow):
         self.setup_global_yt_player()
         self.setup_system_tray() 
         self.init_ui()
+        self.style_open_menus()
+        QApplication.instance().installEventFilter(self)
         self.setup_event_listeners()
         self.setup_background_timer()
+
+    def style_open_menus(self):
+        """Açılır seçimleri bulundukları ekranın vurgu rengiyle stillendir."""
+        menu_colors = {
+            "UniversityView": ("#075985", "#38bdf8", "#e0f2fe"),
+            "ProjectView": ("#155e75", "#22d3ee", "#cffafe"),
+            "TimetableView": ("#6d28d9", "#a78bfa", "#ede9fe"),
+            "CalendarView": ("#166534", "#4ade80", "#dcfce7"),
+            "FitnessView": ("#166534", "#4ade80", "#dcfce7"),
+            "MusicView": ("#166534", "#4ade80", "#dcfce7"),
+            "AIChatWindow": ("#075985", "#38bdf8", "#e0f2fe"),
+            "SettingsView": ("#1d4ed8", "#60a5fa", "#dbeafe"),
+            "TodoView": ("#075985", "#60a5fa", "#dbeafe"),
+            "VaultView": ("#0e7490", "#22d3ee", "#cffafe"),
+        }
+
+        for combo in self.findChildren(QComboBox):
+            combo.installEventFilter(self)
+            color_key = "SettingsView"
+            parent = combo.parentWidget()
+            while parent:
+                class_name = parent.__class__.__name__
+                if class_name in menu_colors:
+                    color_key = class_name
+                    break
+                parent = parent.parentWidget()
+
+            background, border, selection = menu_colors[color_key]
+            combo.setStyleSheet(f"""
+                QComboBox {{
+                    background-color: rgba(39, 39, 42, 185);
+                    color: #ffffff;
+                    border: 1px solid {border};
+                    border-radius: 7px;
+                    padding: 6px 10px;
+                    font-weight: 700;
+                }}
+                QComboBox:hover {{ border: 2px solid {border}; }}
+                QComboBox::drop-down {{ width: 28px; border: none; background: transparent; }}
+                QComboBox QAbstractItemView {{
+                    background-color: rgba(24, 24, 27, 238);
+                    color: #f4f4f5;
+                    border: 1px solid {border};
+                    selection-background-color: {selection};
+                    selection-color: #0c0a09;
+                    padding: 4px;
+                }}
+            """)
+
+    def eventFilter(self, watched, event):
+        if isinstance(watched, QComboBox) and watched.isEnabled() and event.type() == QEvent.MouseButtonPress:
+            watched.showPopup()
+            return True
+        return super().eventFilter(watched, event)
 
     def setup_global_yt_player(self):
         self.yt_webview = QWebEngineView()
@@ -1186,11 +1295,7 @@ class MainWindow(QMainWindow):
         """)
         self.btn_toggle_sidebar.clicked.connect(self.toggle_sidebar)
 
-        self.brand = QLabel("⚡ STUDENT LIFE OS")
-        self.brand.setStyleSheet("font-size: 16px; font-weight: 900; letter-spacing: 1px; color: #38bdf8;")
-        
         top_sb_row.addWidget(self.btn_toggle_sidebar)
-        top_sb_row.addWidget(self.brand)
         sb_lay.addLayout(top_sb_row)
         sb_lay.addSpacing(10)
 
@@ -1347,7 +1452,6 @@ class MainWindow(QMainWindow):
         end_w = 68 if self.is_sidebar_expanded else 230
 
         if self.is_sidebar_expanded:
-            self.brand.hide()
             self.status_lbl.hide()
             
             self.btn_hide.setProperty("full_text", self.btn_hide.text())
@@ -1392,10 +1496,7 @@ class MainWindow(QMainWindow):
         self.sidebar_anim.valueChanged.connect(lambda val: self.sidebar.setFixedWidth(val))
 
         if self.is_sidebar_expanded:
-            self.sidebar_anim.finished.connect(lambda: (
-                self.brand.show(),
-                self.status_lbl.show()
-            ))
+            self.sidebar_anim.finished.connect(self.status_lbl.show)
 
         self.sidebar_anim.start()
     def resizeEvent(self, event):

@@ -279,9 +279,11 @@ class VaultView(QWidget):
         left_box = QVBoxLayout()
         left_box.setSpacing(8)
 
-        btn_new_note = QPushButton("+ Yeni Not")
-        btn_new_note.setObjectName("AccentButton")
+        btn_new_note = QPushButton("📝  Yeni Not")
+        btn_new_note.setObjectName("VaultNewNoteButton")
+        btn_new_note.setMinimumHeight(40)
         btn_new_note.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_new_note.setStyleSheet("QPushButton#VaultNewNoteButton { background: #0e7490; color: #ecfeff; border: 1px solid #22d3ee; border-radius: 9px; padding: 8px 14px; font-weight: 800; } QPushButton#VaultNewNoteButton:hover { background: #0891b2; color: white; }")
         btn_new_note.clicked.connect(self.new_note)
 
         btn_import_note = QPushButton("📥 İçe Aktar (TXT/MD/DOCX)")
@@ -598,9 +600,11 @@ class VaultView(QWidget):
         btn_new_spreadsheet.setStyleSheet("background-color: #064e3b; color: #10b981; padding: 6px; border-radius: 4px; border: 1px solid #047857; font-weight: bold;")
         btn_new_spreadsheet.clicked.connect(self.open_spreadsheet_editor)
 
-        btn_add = QPushButton("+ Dosya Yükle (PDF, PPTX, DOCX, Excel, Resim)")
-        btn_add.setObjectName("AccentButton")
+        btn_add = QPushButton("📤  Dosya Yükle (PDF, PPTX, DOCX, Excel, Resim)")
+        btn_add.setObjectName("VaultUploadButton")
+        btn_add.setMinimumHeight(42)
         btn_add.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_add.setStyleSheet("QPushButton#VaultUploadButton { background: #b45309; color: #fff7ed; border: 1px solid #f59e0b; border-radius: 9px; padding: 9px 12px; font-weight: 800; } QPushButton#VaultUploadButton:hover { background: #d97706; color: white; }")
         btn_add.clicked.connect(self.dialog_upload_material)
         
         left_box.addWidget(btn_new_spreadsheet)

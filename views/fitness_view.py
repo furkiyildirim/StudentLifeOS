@@ -243,9 +243,23 @@ class FitnessView(QWidget):
         lbl_h_title = QLabel("⚡ Alışkanlık Zinciri")
         lbl_h_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #ffffff;")
         
-        btn_add_habit = QPushButton("+ Alışkanlık")
-        btn_add_habit.setObjectName("AccentButton")
+        btn_add_habit = QPushButton("🌱  Alışkanlık Ekle")
+        btn_add_habit.setObjectName("FitnessAddButton")
+        btn_add_habit.setMinimumSize(150, 40)
         btn_add_habit.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_add_habit.setStyleSheet("""
+            QPushButton#FitnessAddButton {
+                background-color: #16a34a;
+                color: #f0fdf4;
+                border: 1px solid #4ade80;
+                border-radius: 9px;
+                padding: 8px 15px;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QPushButton#FitnessAddButton:hover { background-color: #22c55e; border-color: #86efac; }
+            QPushButton#FitnessAddButton:pressed { background-color: #15803d; padding-top: 10px; padding-bottom: 6px; }
+        """)
         btn_add_habit.clicked.connect(self.dialog_add_habit)
 
         h_header.addWidget(lbl_h_title)
@@ -276,9 +290,23 @@ class FitnessView(QWidget):
         lbl_w_title = QLabel("🏋️ Spor ve Antrenman Takvimi")
         lbl_w_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #ffffff;")
 
-        btn_add_ex = QPushButton("+ Hareket Ekle")
-        btn_add_ex.setObjectName("AccentButton")
+        btn_add_ex = QPushButton("🏋️  Hareket Ekle")
+        btn_add_ex.setObjectName("FitnessAddButton")
+        btn_add_ex.setMinimumSize(150, 40)
         btn_add_ex.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_add_ex.setStyleSheet("""
+            QPushButton#FitnessAddButton {
+                background-color: #16a34a;
+                color: #f0fdf4;
+                border: 1px solid #4ade80;
+                border-radius: 9px;
+                padding: 8px 15px;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QPushButton#FitnessAddButton:hover { background-color: #22c55e; border-color: #86efac; }
+            QPushButton#FitnessAddButton:pressed { background-color: #15803d; padding-top: 10px; padding-bottom: 6px; }
+        """)
         btn_add_ex.clicked.connect(self.dialog_add_exercise)
 
         w_header.addWidget(lbl_w_title)

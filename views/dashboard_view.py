@@ -376,20 +376,24 @@ class DashboardView(QWidget):
         header_row.addLayout(title_box)
         header_row.addStretch()
 
-        btn_quick_note = QPushButton("✏️ Hızlı Not")
+        btn_quick_note = QPushButton("✏️  Hızlı Not")
+        btn_quick_note.setObjectName("QuickNoteButton")
+        btn_quick_note.setMinimumSize(120, 40)
         btn_quick_note.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_quick_note.setStyleSheet("background-color: #1c1917; border: 1px solid #292524; color: #e7e5e4; border-radius: 8px; padding: 7px 14px; font-weight: 600;")
+        btn_quick_note.setStyleSheet("QPushButton#QuickNoteButton { background: #1e3a5f; border: 1px solid #60a5fa; color: #dbeafe; border-radius: 9px; padding: 8px 14px; font-weight: 800; } QPushButton#QuickNoteButton:hover { background: #2563eb; color: white; }")
         btn_quick_note.clicked.connect(self.dialog_quick_note)
 
-        btn_quick_plan = QPushButton("+ Plan Ekle")
-        btn_quick_plan.setObjectName("AccentButton")
+        btn_quick_plan = QPushButton("➕  Plan Ekle")
+        btn_quick_plan.setObjectName("QuickPlanButton")
+        btn_quick_plan.setMinimumSize(125, 40)
         btn_quick_plan.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_quick_plan.setStyleSheet("padding: 7px 14px; font-weight: 600; border-radius: 8px;")
+        btn_quick_plan.setStyleSheet("QPushButton#QuickPlanButton { background: #166534; border: 1px solid #4ade80; color: #f0fdf4; border-radius: 9px; padding: 8px 14px; font-weight: 800; } QPushButton#QuickPlanButton:hover { background: #22c55e; color: white; }")
         btn_quick_plan.clicked.connect(self.dialog_quick_plan)
 
         header_row.addWidget(btn_quick_note)
         header_row.addWidget(btn_quick_plan)
         self.content_lay.addLayout(header_row)
+        self.content_lay.addWidget(self.create_section_divider())
 
         # 2. KPI Rozetleri
         self.kpi_layout = QHBoxLayout()
@@ -406,13 +410,16 @@ class DashboardView(QWidget):
         self.kpi_layout.addWidget(self.badge_workout)
         
         self.content_lay.addLayout(self.kpi_layout)
+        self.content_lay.addWidget(self.create_section_divider())
 
         # 3. Grafik Bölümü (Analitik Kartı)
         self.charts_card = self.create_analytics_card()
         self.content_lay.addWidget(self.charts_card)
+        self.content_lay.addWidget(self.create_section_divider())
 
         self.study_time_card = self.create_study_time_card()
         self.content_lay.addWidget(self.study_time_card)
+        self.content_lay.addWidget(self.create_section_divider())
 
         # 4. Ana Detay Grid Paneli
         self.grid = QGridLayout()
@@ -443,6 +450,13 @@ class DashboardView(QWidget):
         self.fetch_weather()
 
         self.refresh()
+
+    def create_section_divider(self):
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setFixedHeight(1)
+        divider.setStyleSheet("background-color: rgba(255, 255, 255, 0.22); border: none; margin: 2px 0;")
+        return divider
 
     def update_clock(self):
         now = datetime.now()
@@ -529,8 +543,9 @@ class DashboardView(QWidget):
         lay.setSpacing(24)
 
         bar_box = QVBoxLayout()
-        bar_title = QLabel("📊 Son 7 Günlük Alışkanlık Tamamlama")
-        bar_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #ffffff;")
+        bar_title = QLabel("📊 Son 7 Gün Alışkanlıkları")
+        bar_title.setWordWrap(False)
+        bar_title.setStyleSheet("background: #17324d; border: 1px solid #2563eb; border-radius: 7px; padding: 7px 10px; font-size: 13px; font-weight: 800; color: #dbeafe;")
         self.bar_chart = HabitWeeklyBarChart([])
         bar_box.addWidget(bar_title)
         bar_box.addWidget(self.bar_chart)
@@ -542,8 +557,9 @@ class DashboardView(QWidget):
         lay.addWidget(sep)
 
         donut_box = QVBoxLayout()
-        donut_title = QLabel("🎯 Değerlendirme / Sınav Dağılımı")
-        donut_title.setStyleSheet("font-size: 13px; font-weight: 700; color: #ffffff;")
+        donut_title = QLabel("🎯 Sınav Dağılımı")
+        donut_title.setWordWrap(False)
+        donut_title.setStyleSheet("background: #3b1d68; border: 1px solid #8b5cf6; border-radius: 7px; padding: 7px 10px; font-size: 13px; font-weight: 800; color: #ede9fe;")
         self.donut_chart = AssessmentDonutChart([])
         donut_box.addWidget(donut_title)
         donut_box.addWidget(self.donut_chart)
@@ -559,8 +575,10 @@ class DashboardView(QWidget):
         lay.setSpacing(8)
 
         header = QHBoxLayout()
-        title = QLabel("⏱️ Toplam Ders Çalışma Süresi")
-        title.setStyleSheet("font-size: 14px; font-weight: 700; color: #ffffff;")
+        title = QLabel("⏱️ Ders Çalışma Süresi")
+        title.setWordWrap(False)
+        title.setMinimumWidth(165)
+        title.setStyleSheet("background: #134e4a; border: 1px solid #14b8a6; border-radius: 7px; padding: 5px 7px; font-size: 11px; font-weight: 800; color: #ccfbf1;")
         self.study_time_summary = QLabel("Veri yok")
         self.study_time_summary.setStyleSheet("color: #38bdf8; font-size: 12px; font-weight: 700;")
 
@@ -570,9 +588,9 @@ class DashboardView(QWidget):
         btn_open_timer.clicked.connect(self.open_focus_timer)
 
         self.study_period_combo = QComboBox()
-        self.study_period_combo.addItems(["Haftalık", "Aylık"])
-        self.study_period_combo.setFixedWidth(110)
-        self.study_period_combo.setStyleSheet("background-color: #27272a; color: #e4e4e7; border: 1px solid #3f3f46; border-radius: 5px; padding: 5px;")
+        self.study_period_combo.addItems(["Haftalık", "Aylık", "3 Aylık", "Yıllık", "Tüm Zamanlar"])
+        self.study_period_combo.setFixedWidth(130)
+        self.study_period_combo.setStyleSheet("QComboBox { background-color: #1d4ed8; color: #dbeafe; border: 1px solid #60a5fa; border-radius: 7px; padding: 6px 8px; font-weight: 800; } QComboBox::drop-down { border: none; }")
         self.study_period_combo.currentIndexChanged.connect(self._update_study_chart)
 
         header.addWidget(title)
@@ -691,22 +709,42 @@ class DashboardView(QWidget):
 
     def _update_study_chart(self):
         today = date.today()
-        is_monthly = self.study_period_combo.currentText() == "Aylık"
-        day_count = 30 if is_monthly else 7
+        period = self.study_period_combo.currentText()
+        is_all_time = period == "Tüm Zamanlar"
+        is_yearly = period == "Yıllık"
+        is_monthly = period in ("Aylık", "3 Aylık")
+        day_count = {"Haftalık": 7, "Aylık": 30, "3 Aylık": 90}.get(period, 365)
         start_date = today - timedelta(days=day_count - 1)
         daily_seconds = {}
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                "SELECT log_date, seconds FROM study_time_logs WHERE log_date BETWEEN ? AND ?",
-                (start_date.isoformat(), today.isoformat()),
-            )
+            if is_all_time:
+                cur.execute("SELECT log_date, seconds FROM study_time_logs ORDER BY log_date ASC")
+            else:
+                cur.execute(
+                    "SELECT log_date, seconds FROM study_time_logs WHERE log_date BETWEEN ? AND ?",
+                    (start_date.isoformat(), today.isoformat()),
+                )
             daily_seconds = {row["log_date"]: row["seconds"] for row in cur.fetchall()}
 
-        if is_monthly:
+        if is_all_time or is_yearly:
+            months = {}
+            for log_date, seconds in daily_seconds.items():
+                month_key = log_date[:7]
+                months[month_key] = months.get(month_key, 0) + seconds
+            if is_yearly:
+                month_limit = (today.replace(day=1) - timedelta(days=335)).strftime("%Y-%m")
+                months = {key: value for key, value in months.items() if key >= month_limit}
             chart_data = []
-            for bucket in range(5):
+            month_names = ["", "Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+            for month_key in sorted(months):
+                year, month = (int(value) for value in month_key.split("-"))
+                chart_data.append((f"{month_names[month]} {year}", months[month_key]))
+        elif is_monthly:
+            chart_data = []
+            week_count = (day_count + 6) // 7
+            for bucket in range(week_count):
                 bucket_start = start_date + timedelta(days=bucket * 7)
                 bucket_end = min(today, bucket_start + timedelta(days=6))
                 seconds = sum(
@@ -722,7 +760,14 @@ class DashboardView(QWidget):
 
         total_seconds = sum(seconds for _, seconds in chart_data)
         total_hours = total_seconds / 3600
-        period_label = "son 30 gün" if is_monthly else "son 7 gün"
+        period_labels = {
+            "Haftalık": "son 7 gün",
+            "Aylık": "son 30 gün",
+            "3 Aylık": "son 90 gün",
+            "Yıllık": "son 12 ay",
+            "Tüm Zamanlar": "tüm zamanlar",
+        }
+        period_label = period_labels[period]
         self.study_time_summary.setText(f"{total_hours:.1f} saat • {period_label}")
         self.study_time_chart.set_data(chart_data)
 
@@ -745,8 +790,10 @@ class DashboardView(QWidget):
         lay.setContentsMargins(14, 14, 14, 14)
         lay.setSpacing(10)
 
-        title = QLabel("🕒 Günün Kronolojik Akışı")
+        title = QLabel("🕒 Günün Akışı")
         title.setObjectName("CardHeader")
+        title.setWordWrap(False)
+        title.setStyleSheet("background: #1c3042; border: 1px solid #2563eb; border-radius: 7px; padding: 6px 8px; font-size: 13px; font-weight: 800; color: #dbeafe;")
         lay.addWidget(title)
 
         today_dow = datetime.now().weekday()
@@ -833,8 +880,10 @@ class DashboardView(QWidget):
         lay.setContentsMargins(14, 14, 14, 14)
         lay.setSpacing(10)
 
-        title = QLabel("⚡ Canlı Alışkanlık İlerlemesi")
+        title = QLabel("⚡ Alışkanlık İlerlemesi")
         title.setObjectName("CardHeader")
+        title.setWordWrap(False)
+        title.setStyleSheet("background: #134e4a; border: 1px solid #14b8a6; border-radius: 7px; padding: 6px 8px; font-size: 13px; font-weight: 800; color: #ccfbf1;")
         lay.addWidget(title)
 
         today_iso = date.today().isoformat()
@@ -896,8 +945,10 @@ class DashboardView(QWidget):
         lay.setContentsMargins(14, 14, 14, 14)
         lay.setSpacing(10)
 
-        title = QLabel("🎯 Sınav Kronometresi & Kritik Teslimler")
+        title = QLabel("🎯 Sınavlar & Teslimler")
         title.setObjectName("CardHeader")
+        title.setWordWrap(False)
+        title.setStyleSheet("background: #3b1d68; border: 1px solid #8b5cf6; border-radius: 7px; padding: 6px 8px; font-size: 13px; font-weight: 800; color: #ede9fe;")
         lay.addWidget(title)
 
         today = date.today()
@@ -960,8 +1011,10 @@ class DashboardView(QWidget):
         lay.setSpacing(10)
 
         today_dow = datetime.now().weekday()
-        title = QLabel(f"🏋️ Günün Antrenman Planı ({DAYS_TR[today_dow]})")
+        title = QLabel(f"🏋️ Günün Antrenmanı ({DAYS_TR[today_dow]})")
         title.setObjectName("CardHeader")
+        title.setWordWrap(False)
+        title.setStyleSheet("background: #4a2a0a; border: 1px solid #f59e0b; border-radius: 7px; padding: 6px 8px; font-size: 13px; font-weight: 800; color: #fef3c7;")
         lay.addWidget(title)
 
         with self.db.get_connection() as conn:

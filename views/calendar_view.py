@@ -179,10 +179,31 @@ class CalendarView(QWidget):
         header_bar.addWidget(btn_next)
         header_bar.addStretch()
 
-        btn_add_plan = QPushButton("+ Seçilen Güne Plan Ekle")
-        btn_add_plan.setObjectName("AccentButton")
+        btn_add_plan = QPushButton("➕  Seçilen Güne Plan Ekle")
+        self.btn_add_plan = btn_add_plan
+        btn_add_plan.setObjectName("CalendarAddPlanButton")
         btn_add_plan.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_add_plan.setFixedHeight(36)
+        btn_add_plan.setMinimumSize(210, 42)
+        btn_add_plan.setStyleSheet("""
+            QPushButton#CalendarAddPlanButton {
+                background-color: #16a34a;
+                color: #f0fdf4;
+                border: 1px solid #4ade80;
+                border-radius: 9px;
+                padding: 9px 16px;
+                font-size: 13px;
+                font-weight: 800;
+            }
+            QPushButton#CalendarAddPlanButton:hover {
+                background-color: #22c55e;
+                border-color: #86efac;
+            }
+            QPushButton#CalendarAddPlanButton:pressed {
+                background-color: #15803d;
+                padding-top: 11px;
+                padding-bottom: 7px;
+            }
+        """)
         btn_add_plan.clicked.connect(self.dialog_add_event)
         header_bar.addWidget(btn_add_plan)
 
@@ -381,6 +402,7 @@ class CalendarView(QWidget):
     def update_detail_view(self):
         d = self.selected_date
         tr_date_str = f"{d.day} {MONTHS_TR[d.month]} {d.year}, {DAYS_FULL_TR[d.weekday()]}"
+        self.btn_add_plan.setText(f"➕  {d.strftime('%d.%m.%Y')} Gününe Plan Ekle")
         
         today = date.today()
         if d == today:
