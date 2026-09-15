@@ -86,7 +86,7 @@ Uygulamanin ekran goruntuleri `images/` klasorunden:
 
 ![AI Asistani](images/ai-assistant.png)
 
-images/dosya-adi.png)
+
 ```
 
 ## Gereksinimler
