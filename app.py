@@ -55,12 +55,23 @@ def ensure_single_instance():
         try:
             with open(lock_path, "r", encoding="ascii") as lock_file:
                 existing_pid = int(lock_file.read().strip())
-            os.kill(existing_pid, 0)
+            
+            if os.name != 'nt':
+                os.kill(existing_pid, 0)
+            else:
+                # Windows'ta os.kill(pid, 0) desteklenmediği için yapay bir OSError fırlatıp kilit kontrolüne (except) geçiyoruz
+                raise OSError("Windows process check fallback")
+                
         except (FileNotFoundError, ProcessLookupError, ValueError, OSError):
             try:
                 os.remove(lock_path)
+            except PermissionError:
+                # [WinError 32] Dosya kilitli ve başka bir işlem tarafından kullanılıyor.
+                # Bu, uygulamanın şu anda aktif olarak çalıştığı anlamına gelir.
+                return False
             except FileNotFoundError:
                 pass
+            
             try:
                 fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
             except FileExistsError:
