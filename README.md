@@ -58,6 +58,8 @@ Uygulamanin ekran goruntuleri `images/` klasorunden:
 
 ![Ders Programi Detayi](images/timetable2.png)
 
+![Ders Programi Detayi](images/timetable3.png)
+
 ![Materyal Kasasi](images/vault.png)
 
 ![Materyal Kasasi Detayi](images/vault2.png)
