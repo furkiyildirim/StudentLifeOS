@@ -24,24 +24,38 @@ class TimetableColorDelegate(QStyledItemDelegate):
 
         painter.save()
         cell_rect = option.rect.adjusted(4, 4, -4, -4)
-        painter.fillRect(cell_rect, background)
+        
+        # 1. Fill the translucent colored background
+        bg_color = background.color()
+        bg_color.setAlpha(50)  # ~20% opacity 
+        painter.fillRect(cell_rect, bg_color)
+        
+        # 2. Draw a solid left border to make the class color pop
+        border_color = background.color()
+        border_color.setAlpha(255)
+        painter.fillRect(cell_rect.x(), cell_rect.y(), 3, cell_rect.height(), border_color)
 
+        # 3. Draw the text
         foreground = index.data(Qt.ForegroundRole)
         painter.setPen(foreground.color() if isinstance(foreground, QBrush) else QColor("#ffffff"))
         font = painter.font()
         font.setPointSize(9)
         painter.setFont(font)
+        
+        # Shift text slightly to the right (6px) to accommodate the new border
         painter.drawText(
-            cell_rect.adjusted(3, 3, -3, -3),
+            cell_rect.adjusted(6, 3, -3, -3), 
             Qt.AlignCenter | Qt.TextWordWrap,
             str(index.data(Qt.DisplayRole) or "")
         )
 
+        # 4. Handle selected state styling
         if is_selected:
             painter.save()
             painter.setPen(QColor("#38bdf8"))
             painter.drawRect(cell_rect.adjusted(1, 1, -2, -2))
             painter.restore()
+            
         painter.restore()
 
 class PersonalPlanDelegate(QStyledItemDelegate):
