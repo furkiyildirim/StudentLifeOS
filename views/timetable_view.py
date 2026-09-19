@@ -484,10 +484,13 @@ class TimetableView(QWidget):
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
+            # COALESCE kullanarak hücre boşsa (NULL veya '') ana dersin bilgilerini çekiyoruz
             cur.execute("""
                   SELECT t.id, t.day_of_week, t.start_time, t.end_time, t.cell_color,
                       c.code, c.name, c.credit,
-                      t.instructor, t.instructor_contact, t.classroom,
+                      COALESCE(NULLIF(t.instructor, ''), c.instructor) as instructor,
+                      COALESCE(NULLIF(t.instructor_contact, ''), c.instructor_contact) as instructor_contact,
+                      COALESCE(NULLIF(t.classroom, ''), c.classroom) as classroom,
                       c.color_hex, t.course_id
                 FROM timetable t
                 JOIN courses c ON t.course_id = c.id
@@ -502,7 +505,12 @@ class TimetableView(QWidget):
             row_idx = day_counters[dow]
             if row_idx < 8:
                 c_color = s["cell_color"] if s["cell_color"] else (s["color_hex"] if s["color_hex"] else "#38bdf8")
-                text = f"{s['code']}\n{s['start_time']} - {s['end_time']}\n({s['classroom'] or 'Amfi belirtilmedi'})\n{s['instructor'] or 'Hoca girilmedi'}"
+                
+                # Boş gelme ihtimaline karşı son bir güvenlik duvarı
+                hoca_text = s['instructor'] if s['instructor'] else "Hoca girilmedi"
+                amfi_text = s['classroom'] if s['classroom'] else "Amfi belirtilmedi"
+                
+                text = f"{s['code']}\n{s['start_time']} - {s['end_time']}\n({amfi_text})\n{hoca_text}"
                 
                 bg_color = QColor(c_color)
                 if not bg_color.isValid(): bg_color = QColor("#38bdf8")
@@ -659,9 +667,10 @@ class TimetableView(QWidget):
 
             if not course: return
 
-            slot_instructor = (slot["instructor"] if slot else None) or "Belirtilmemiş"
-            slot_contact = (slot["instructor_contact"] if slot else None) or "Belirtilmemiş"
-            slot_classroom = (slot["classroom"] if slot else None) or "Belirtilmemiş"
+            # Eğer takvim hücresinde (slot) özel olarak hoca/sınıf girilmemişse, dersin ana ayarlarından (course) çek.
+            slot_instructor = (slot["instructor"] if slot and slot["instructor"] else None) or course["instructor"] or "Belirtilmemiş"
+            slot_contact = (slot["instructor_contact"] if slot and slot["instructor_contact"] else None) or course["instructor_contact"] or "Belirtilmemiş"
+            slot_classroom = (slot["classroom"] if slot and slot["classroom"] else None) or course["classroom"] or "Belirtilmemiş"
 
             dlg = QDialog(self)
             dlg.setWindowTitle(f"Ders Detayları - {course['code']}")

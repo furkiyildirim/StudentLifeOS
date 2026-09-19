@@ -369,9 +369,15 @@ class DashboardView(QWidget):
         self.lbl_weather = QLabel("Hava Durumu Yükleniyor...")
         self.lbl_weather.setStyleSheet("font-size: 14px; color: #38bdf8; font-weight: bold;")
         
+        self.btn_semester = QPushButton("Dönem Tarihleri Hesaplanıyor...")
+        self.btn_semester.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_semester.setStyleSheet("text-align: left; font-size: 13px; color: #fbbf24; font-weight: bold; background: rgba(251, 191, 36, 0.15); padding: 4px 8px; border-radius: 6px; margin-top: 4px; border: 1px solid rgba(251, 191, 36, 0.3);")
+        self.btn_semester.clicked.connect(self.dialog_set_semester_dates)
+        
         title_box.addWidget(self.lbl_greet)
         title_box.addWidget(self.lbl_clock)
         title_box.addWidget(self.lbl_weather)
+        title_box.addWidget(self.btn_semester) # Kutuya eklendi
         
         header_row.addLayout(title_box)
         header_row.addStretch()
@@ -450,6 +456,141 @@ class DashboardView(QWidget):
         self.fetch_weather()
 
         self.refresh()
+
+    def dialog_set_semester_dates(self):
+        from PySide6.QtWidgets import QDateEdit
+        from PySide6.QtCore import QDate
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Dönem Tarihlerini Belirle")
+        dlg.resize(300, 150)
+        lay = QVBoxLayout(dlg)
+        
+        start_dt = QDateEdit()
+        start_dt.setCalendarPopup(True)
+        start_dt.setDisplayFormat("dd.MM.yyyy")
+        end_dt = QDateEdit()
+        end_dt.setCalendarPopup(True)
+        end_dt.setDisplayFormat("dd.MM.yyyy")
+        
+        s_str, e_str = self._get_semester_bounds()
+        if s_str and s_str != "0001-01-01":
+            try: start_dt.setDate(QDate.fromString(s_str, "yyyy-MM-dd"))
+            except: start_dt.setDate(QDate.currentDate())
+        else:
+            start_dt.setDate(QDate.currentDate())
+            
+        if e_str and e_str != "9999-12-31":
+            try: end_dt.setDate(QDate.fromString(e_str, "yyyy-MM-dd"))
+            except: end_dt.setDate(QDate.currentDate().addMonths(4))
+        else:
+            end_dt.setDate(QDate.currentDate().addMonths(4))
+            
+        lay.addWidget(QLabel("Dönem Başlangıç Tarihi:"))
+        lay.addWidget(start_dt)
+        lay.addWidget(QLabel("Dönem Bitiş Tarihi:"))
+        lay.addWidget(end_dt)
+        
+        btn_save = QPushButton("Kaydet")
+        btn_save.setObjectName("AccentButton")
+        lay.addWidget(btn_save)
+        
+        def save():
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                s_val = start_dt.date().toString("yyyy-MM-dd")
+                e_val = end_dt.date().toString("yyyy-MM-dd")
+                
+                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'semester_start_date'")
+                if cur.fetchone():
+                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'semester_start_date'", (s_val,))
+                else:
+                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_start_date', ?)", (s_val,))
+                    
+                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'semester_end_date'")
+                if cur.fetchone():
+                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'semester_end_date'", (e_val,))
+                else:
+                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_end_date', ?)", (e_val,))
+                conn.commit()
+                
+            dlg.accept()
+            self.refresh()
+            try:
+                from core.sound import play_action_sound
+                play_action_sound("save")
+            except: pass
+            
+        btn_save.clicked.connect(save)
+        dlg.exec()
+
+    def dialog_set_semester_dates(self):
+        from PySide6.QtWidgets import QDateEdit
+        from PySide6.QtCore import QDate
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Dönem Tarihlerini Belirle")
+        dlg.resize(300, 150)
+        lay = QVBoxLayout(dlg)
+        
+        start_dt = QDateEdit()
+        start_dt.setCalendarPopup(True)
+        start_dt.setDisplayFormat("dd.MM.yyyy")
+        end_dt = QDateEdit()
+        end_dt.setCalendarPopup(True)
+        end_dt.setDisplayFormat("dd.MM.yyyy")
+        
+        # Mevcut veritabanı ayarlarını çek
+        s_str, e_str = self._get_semester_bounds()
+        if s_str and s_str != "0001-01-01":
+            try: start_dt.setDate(QDate.fromString(s_str, "yyyy-MM-dd"))
+            except: start_dt.setDate(QDate.currentDate())
+        else:
+            start_dt.setDate(QDate.currentDate())
+            
+        if e_str and e_str != "9999-12-31":
+            try: end_dt.setDate(QDate.fromString(e_str, "yyyy-MM-dd"))
+            except: end_dt.setDate(QDate.currentDate().addMonths(4))
+        else:
+            end_dt.setDate(QDate.currentDate().addMonths(4))
+            
+        lay.addWidget(QLabel("Dönem Başlangıç Tarihi:"))
+        lay.addWidget(start_dt)
+        lay.addWidget(QLabel("Dönem Bitiş Tarihi:"))
+        lay.addWidget(end_dt)
+        
+        btn_save = QPushButton("Kaydet")
+        btn_save.setObjectName("AccentButton")
+        lay.addWidget(btn_save)
+        
+        def save():
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                s_val = start_dt.date().toString("yyyy-MM-dd")
+                e_val = end_dt.date().toString("yyyy-MM-dd")
+                
+                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'semester_start_date'")
+                if cur.fetchone():
+                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'semester_start_date'", (s_val,))
+                else:
+                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_start_date', ?)", (s_val,))
+                    
+                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'semester_end_date'")
+                if cur.fetchone():
+                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'semester_end_date'", (e_val,))
+                else:
+                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_end_date', ?)", (e_val,))
+                conn.commit()
+                
+            dlg.accept()
+            self.refresh()
+            try:
+                from core.sound import play_action_sound
+                play_action_sound("save")
+            except: pass
+            
+        btn_save.clicked.connect(save)
+        dlg.exec()
 
     def create_section_divider(self):
         divider = QFrame()
@@ -643,6 +784,30 @@ class DashboardView(QWidget):
         today_iso = date.today().isoformat()
         semester_start, semester_end = self._get_semester_bounds()
 
+        # --- DÖNEM SAYAÇ GÜNCELLEMESİ ---
+        try:
+            if semester_start == "0001-01-01" or semester_end == "9999-12-31" or not semester_start or not semester_end:
+                self.btn_semester.setText("⏳ Dönem tarihleri ayarlanmadı (Tıklayın)")
+                self.btn_semester.setStyleSheet("text-align: left; font-size: 13px; color: #a1a1aa; font-weight: bold; background: #27272a; padding: 6px 10px; border-radius: 6px; margin-top: 4px; border: none;")
+            else:
+                s_date = datetime.strptime(semester_start, "%Y-%m-%d").date()
+                e_date = datetime.strptime(semester_end, "%Y-%m-%d").date()
+                today_d = date.today()
+                
+                if today_d < s_date:
+                    rem = (s_date - today_d).days
+                    self.btn_semester.setText(f"⏳ Dönem Başlangıcına: {rem} Gün Kaldı")
+                    self.btn_semester.setStyleSheet("text-align: left; font-size: 13px; color: #38bdf8; font-weight: bold; background: rgba(56, 189, 248, 0.15); padding: 6px 10px; border-radius: 6px; margin-top: 4px; border: 1px solid rgba(56, 189, 248, 0.3);")
+                elif s_date <= today_d <= e_date:
+                    rem = (e_date - today_d).days
+                    self.btn_semester.setText(f"⏳ Dönemin Bitmesine: {rem} Gün Kaldı")
+                    self.btn_semester.setStyleSheet("text-align: left; font-size: 13px; color: #fbbf24; font-weight: bold; background: rgba(251, 191, 36, 0.15); padding: 6px 10px; border-radius: 6px; margin-top: 4px; border: 1px solid rgba(251, 191, 36, 0.3);")
+                else:
+                    self.btn_semester.setText("⏳ Dönem Sona Erdi (Yeni tarih seçin)")
+                    self.btn_semester.setStyleSheet("text-align: left; font-size: 13px; color: #f43f5e; font-weight: bold; background: rgba(244, 63, 94, 0.15); padding: 6px 10px; border-radius: 6px; margin-top: 4px; border: 1px solid rgba(244, 63, 94, 0.3);")
+        except Exception:
+            self.btn_semester.setText("⏳ Dönem bilgisi hesaplanamadı")
+                
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
