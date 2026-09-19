@@ -1,3 +1,5 @@
+
+
 ```markdown
 # Student Life OS
 
@@ -59,7 +61,6 @@ Uygulamanın ekran görüntüleri `images/` klasöründen[cite: 7]:
 ![Spor ve Alışkanlık](images/fitness.png)
 ![Müzik ve Odak](images/music.png)
 ![Üniversite](images/uni.png)
-![Kitaplik](images/lib.png)
 ![Projeler](images/procject.png)
 ![AI Asistanı](images/ai-assistant.png)
 
