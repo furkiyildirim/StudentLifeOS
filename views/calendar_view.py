@@ -258,19 +258,29 @@ class CalendarView(QWidget):
         detail_layout.addWidget(self.events_list)
 
         btn_box = QHBoxLayout()
-        btn_toggle = QPushButton("✓ TAMAMLANDI")
-        btn_toggle.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_toggle.clicked.connect(self.toggle_event_status)
-        btn_toggle.setStyleSheet("background-color: green; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+        
+        self.btn_toggle = QPushButton("✓ TAMAMLANDI")
+        self.btn_toggle.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_toggle.clicked.connect(self.toggle_event_status)
+        self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+
+        self.btn_edit = QPushButton("✏️ Düzenle")
+        self.btn_edit.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_edit.setStyleSheet("background-color: #f59e0b; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+        self.btn_edit.clicked.connect(self.edit_event)
 
         btn_delete = QPushButton("🗑 Sil")
         btn_delete.setCursor(QCursor(Qt.PointingHandCursor))
         btn_delete.setStyleSheet("background-color: #7f1d1d; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
         btn_delete.clicked.connect(self.delete_event)
 
-        btn_box.addWidget(btn_toggle)
+        btn_box.addWidget(self.btn_toggle)
+        btn_box.addWidget(self.btn_edit)
         btn_box.addWidget(btn_delete)
         detail_layout.addLayout(btn_box)
+
+        # Seçim değiştiğinde "Geri Al" / "Tamamlandı" kontrolünü yapacak sinyal:
+        self.events_list.itemSelectionChanged.connect(self.on_event_selection_changed)
 
         splitter.addWidget(detail_container)
         splitter.setStretchFactor(0, 4)
@@ -468,7 +478,15 @@ class CalendarView(QWidget):
                 else:
                     item.setForeground(QColor(cat_color))
 
-                item.setData(Qt.UserRole, {"type": "plan", "id": p["id"], "completed": p["is_completed"], "title": p["title"]})
+                item.setData(Qt.UserRole, {
+                    "type": "plan", 
+                    "id": p["id"], 
+                    "completed": p["is_completed"], 
+                    "title": p["title"],
+                    "start_time": p["start_time"],
+                    "end_time": p["end_time"],
+                    "category": p["category"]
+                })
                 self.events_list.addItem(item)
 
         if self.events_list.count() == 0:
@@ -476,6 +494,91 @@ class CalendarView(QWidget):
             item.setForeground(QColor("#71717a"))
             item.setData(Qt.UserRole, {"type": "none"})
             self.events_list.addItem(item)
+    def on_event_selection_changed(self):
+        current_item = self.events_list.currentItem()
+        
+        # Seçili öğe yoksa varsayılan görünüm
+        if not current_item:
+            self.btn_toggle.setText("✓ TAMAMLA")
+            self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+            return
+            
+        data = current_item.data(Qt.UserRole)
+        if not data or data.get("type") == "none":
+            self.btn_toggle.setText("✓ TAMAMLA")
+            self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+            return
+            
+        # Eğer öğe TAMAMLANMIŞSA butonu "Geri Al" yap
+        if data.get("completed"):
+            self.btn_toggle.setText("↩ Durumu Geri Al")
+            self.btn_toggle.setStyleSheet("background-color: #d97706; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+        # Eğer öğe TAMAMLANMAMIŞSA butonu "Tamamla" yap
+        else:
+            self.btn_toggle.setText("✓ TAMAMLA")
+            self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+    def edit_event(self):
+        current_item = self.events_list.currentItem()
+        if not current_item:
+            play_action_sound("error")
+            QMessageBox.information(self, "Bilgi", "Lütfen düzenlemek istediğiniz bir öğeyi seçin.")
+            return
+
+        data = current_item.data(Qt.UserRole)
+        if not data or data.get("type") != "plan":
+            play_action_sound("error")
+            QMessageBox.information(self, "Bilgi", "Sadece takvime kendi eklediğiniz planları düzenleyebilirsiniz.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Planı Düzenle")
+        dlg.resize(320, 260)
+        lay = QVBoxLayout(dlg)
+
+        title_in = QLineEdit(data.get("title", ""))
+        
+        cat_box = QComboBox()
+        for i, cat in enumerate(CATEGORIES.keys()):
+            cat_box.addItem(cat)
+            if cat == data.get("category"):
+                cat_box.setCurrentIndex(i)
+
+        start_in = QLineEdit(data.get("start_time") if data.get("start_time") else "")
+        end_in = QLineEdit(data.get("end_time") if data.get("end_time") else "")
+
+        lay.addWidget(QLabel("Başlık:"))
+        lay.addWidget(title_in)
+        lay.addWidget(QLabel("Kategori:"))
+        lay.addWidget(cat_box)
+        lay.addWidget(QLabel("Saat Aralığı:"))
+        lay.addWidget(start_in)
+        lay.addWidget(end_in)
+
+        btn_save = QPushButton("Güncelle")
+        btn_save.setObjectName("AccentButton")
+        lay.addWidget(btn_save)
+
+        def save():
+            if not title_in.text().strip():
+                QMessageBox.warning(dlg, "Uyarı", "Başlık alanı boş bırakılamaz.")
+                return
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE calendar_events 
+                    SET title=?, start_time=?, end_time=?, category=?
+                    WHERE id=?
+                """, (title_in.text().strip(), start_in.text().strip(), end_in.text().strip(), cat_box.currentText(), data["id"]))
+                conn.commit()
+            
+            play_action_sound("save")
+            dlg.accept()
+            self.refresh_calendar()
+            bus.calendar_changed.emit()
+            bus.item_saved.emit(f"Takvim planı güncellendi: '{title_in.text().strip()}'")
+
+        btn_save.clicked.connect(save)
+        dlg.exec()
 
     def dialog_add_event(self):
         dlg = QDialog(self)
@@ -539,11 +642,13 @@ class CalendarView(QWidget):
             return
 
         is_done = data.get("completed")
+        new_status = not is_done # Durumu tersine çeviriyoruz (True ise False, False ise True)
+        
+        # 1. Veritabanında güncelle
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             if data["type"] == "plan":
-                new_status = 0 if is_done else 1
-                cur.execute("UPDATE calendar_events SET is_completed = ? WHERE id = ?", (new_status, data["id"]))
+                cur.execute("UPDATE calendar_events SET is_completed = ? WHERE id = ?", (1 if new_status else 0, data["id"]))
             else:
                 if is_done:
                     cur.execute("DELETE FROM calendar_completions WHERE item_type = ? AND item_id = ? AND date = ?", 
@@ -553,8 +658,37 @@ class CalendarView(QWidget):
                                 (data["type"], data["id"], self.selected_date.isoformat()))
             conn.commit()
 
-        play_action_sound("complete") # PLAN/DERS TAMAMLANDI SESİ
-        self.update_detail_view()
+        play_action_sound("complete")
+        
+        # 2. Listeyi baştan yüklemek yerine SADECE ARAYÜZDEKİ VERİYİ anında güncelliyoruz
+        data["completed"] = new_status
+        current_item.setData(Qt.UserRole, data)
+        text = current_item.text()
+        
+        if new_status: # Tamamlandıysa üstünü çiz, gri yap ve check at
+            text = text.replace("☐", "☑", 1)
+            font = current_item.font()
+            font.setStrikeOut(True)
+            current_item.setFont(font)
+            current_item.setForeground(QColor("#71717a"))
+        else: # Geri alındıysa çizgiyi kaldır ve eski rengine döndür
+            text = text.replace("☑", "☐", 1)
+            font = current_item.font()
+            font.setStrikeOut(False)
+            current_item.setFont(font)
+            
+            # Eski kategorinin orjinal rengini geri ver
+            if data["type"] == "plan":
+                cat_color = CATEGORIES.get(data.get("category", "Genel"), "#f59e0b")
+                current_item.setForeground(QColor(cat_color))
+            else:
+                current_item.setForeground(QColor("#ef4444"))
+                
+        current_item.setText(text)
+        
+        # 3. Butonun anında "Tamamla" veya "Geri Al" formuna bürünmesi için sinyali tetikliyoruz
+        self.on_event_selection_changed()
+        
         if data["type"] == "plan":
             bus.calendar_changed.emit()
 
