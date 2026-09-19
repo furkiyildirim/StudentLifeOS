@@ -186,10 +186,6 @@ Uygulamaya ait ekran görüntüleri `images/` klasöründe bulunmaktadır.
 
 ![Yapılacaklar](images/tasks.png)
 
-### 📚 Kitaplığım
-
-![Kitaplığım](images/library.png)
-
 ### 📅 Akıllı Takvim
 
 ![Akıllı Takvim](images/calendar.png)
