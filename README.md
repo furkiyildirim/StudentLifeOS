@@ -1,4 +1,3 @@
-````markdown
 # Student Life OS
 
 > Öğrenci hayatının ders, görev, proje, materyal, kütüphane, spor ve odak çalışmalarını tek bir Windows masaüstü uygulamasında birleştiren productivity platformu.
@@ -147,7 +146,7 @@ AI asistanı uygulamanın yerel veritabanındaki bilgilerle çalışabilecek şe
 - Görevleri yönetme
 - Akademik programı analiz etme
 - Projeler hakkında bilgi verme
-- Kullanıcının çalışma planına yardımcı olma
+- Çalışma planı oluşturmaya yardımcı olma
 
 gibi işlemler gerçekleştirilebilir.
 
@@ -268,10 +267,6 @@ Yerel AI kullanılacaksa aşağıdaki model dosyasının bulunması gerekir:
 
 ```text
 resources/models/local_model.gguf
-````
-
----
-
 # ⚙️ Kurulum
 
 ## 1. Depoyu Klonlayın
@@ -726,9 +721,3 @@ Student Life OS, üniversite hayatındaki farklı araçları tek bir masaüstü 
 
 **Planla. Çalış. Öğren. Takip Et. Geliş.**
 
----
-
-```
-
-Bunu direkt **`README.md`** olarak kaydedebilirsin. Özellikle senin gönderdiğin sürümdeki `"[cite: 7]"` ifadelerini kaldırdım, GitHub linklerini düzelttim, `procject.png` gibi olası yazım hatasını `project.png` olarak varsaymadım; çünkü gerçek dosya adın farklıysa README'deki görselin kırılmasını istemedim.
-```
