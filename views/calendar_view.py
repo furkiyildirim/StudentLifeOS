@@ -17,7 +17,8 @@ CATEGORIES = {
     "Proje / Ödev": "#8b5cf6",
     "Sınav / Quiz": "#ef4444",
     "Kişisel / Sosyal": "#10b981",
-    "Genel": "#f59e0b"
+    "Genel": "#f59e0b",
+    "Kitap İade": "#ea580c"  # YENİ: Kitap İade Kategorisi (Turuncu)
 }
 
 DAYS_TR = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
@@ -259,7 +260,7 @@ class CalendarView(QWidget):
 
         btn_box = QHBoxLayout()
         
-        self.btn_toggle = QPushButton("✓ TAMAMLANDI")
+        self.btn_toggle = QPushButton("✓ TAMAMLA")
         self.btn_toggle.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_toggle.clicked.connect(self.toggle_event_status)
         self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
@@ -279,7 +280,7 @@ class CalendarView(QWidget):
         btn_box.addWidget(btn_delete)
         detail_layout.addLayout(btn_box)
 
-        # Seçim değiştiğinde "Geri Al" / "Tamamlandı" kontrolünü yapacak sinyal:
+        # Seçim değiştiğinde "Geri Al", "İade Et" ve "Tamamlandı" kontrolünü yapacak sinyal
         self.events_list.itemSelectionChanged.connect(self.on_event_selection_changed)
 
         splitter.addWidget(detail_container)
@@ -333,11 +334,7 @@ class CalendarView(QWidget):
                 is_tod = (day_dt == today)
                 is_sel = (day_dt == self.selected_date)
 
-                # Yalnızca o güne ait özel etkinlikleri ve sınavları alıyoruz
                 day_events = list(events_by_date.get(day_dt.isoformat(), []))
-                
-                # Haftalık derslerin tüm sütuna yansımasını engellemek için timetable 
-                # birleştirmesi buradan kaldırıldı. (Dersler sağ panelde görünmeye devam edecek).
 
                 cell = CalendarDayCell(
                     target_date=day_dt,
@@ -373,18 +370,6 @@ class CalendarView(QWidget):
                     "color": "#ef4444"
                 })
         return events_map
-
-    def get_classes_for_dow(self, dow: int):
-        with self.db.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT c.code, c.color_hex, t.start_time 
-                FROM timetable t
-                JOIN courses c ON t.course_id = c.id
-                WHERE t.day_of_week = ?
-                ORDER BY t.start_time
-            """, (dow,))
-            return cur.fetchall()
 
     def on_day_clicked(self, selected_date: date):
         old_month = self.current_month_date.month
@@ -427,7 +412,6 @@ class CalendarView(QWidget):
         self.events_list.clear()
 
         iso_date = self.selected_date.isoformat()
-        dow = self.selected_date.weekday()
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
@@ -494,10 +478,10 @@ class CalendarView(QWidget):
             item.setForeground(QColor("#71717a"))
             item.setData(Qt.UserRole, {"type": "none"})
             self.events_list.addItem(item)
+
     def on_event_selection_changed(self):
         current_item = self.events_list.currentItem()
         
-        # Seçili öğe yoksa varsayılan görünüm
         if not current_item:
             self.btn_toggle.setText("✓ TAMAMLA")
             self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
@@ -509,14 +493,18 @@ class CalendarView(QWidget):
             self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
             return
             
-        # Eğer öğe TAMAMLANMIŞSA butonu "Geri Al" yap
         if data.get("completed"):
             self.btn_toggle.setText("↩ Durumu Geri Al")
             self.btn_toggle.setStyleSheet("background-color: #d97706; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
-        # Eğer öğe TAMAMLANMAMIŞSA butonu "Tamamla" yap
         else:
-            self.btn_toggle.setText("✓ TAMAMLA")
-            self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+            # --- YENİ EKLENEN İADE ET BUTONU ---
+            if data.get("category") == "Kitap İade":
+                self.btn_toggle.setText("📥 İade Et")
+                self.btn_toggle.setStyleSheet("background-color: #0ea5e9; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+            else:
+                self.btn_toggle.setText("✓ TAMAMLA")
+                self.btn_toggle.setStyleSheet("background-color: #16a34a; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+
     def edit_event(self):
         current_item = self.events_list.currentItem()
         if not current_item:
@@ -528,6 +516,12 @@ class CalendarView(QWidget):
         if not data or data.get("type") != "plan":
             play_action_sound("error")
             QMessageBox.information(self, "Bilgi", "Sadece takvime kendi eklediğiniz planları düzenleyebilirsiniz.")
+            return
+
+        # --- YENİ EKLENEN KİTAP İADE DÜZENLEME ENGELİ ---
+        if data["type"] == "plan" and data.get("category") == "Kitap İade":
+            play_action_sound("error")
+            QMessageBox.warning(self, "Düzenleme Engellendi 🛑", "Otomatik oluşturulan kitap iade görevleri takvim üzerinden düzenlenemez.\nLütfen işlemi Kitaplığım sekmesinden onaylayın veya iptal edin.")
             return
 
         dlg = QDialog(self)
@@ -622,7 +616,7 @@ class CalendarView(QWidget):
                 """, (title_in.text().strip(), self.selected_date.isoformat(), start_in.text().strip(), end_in.text().strip(), cat_box.currentText()))
                 conn.commit()
                 
-            play_action_sound("save") # KULLANICI PLANI KAYDEDİLDİ SESİ
+            play_action_sound("save") 
             dlg.accept()
             self.refresh_calendar()
             bus.calendar_changed.emit()
@@ -642,9 +636,8 @@ class CalendarView(QWidget):
             return
 
         is_done = data.get("completed")
-        new_status = not is_done # Durumu tersine çeviriyoruz (True ise False, False ise True)
+        new_status = not is_done 
         
-        # 1. Veritabanında güncelle
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             if data["type"] == "plan":
@@ -660,24 +653,22 @@ class CalendarView(QWidget):
 
         play_action_sound("complete")
         
-        # 2. Listeyi baştan yüklemek yerine SADECE ARAYÜZDEKİ VERİYİ anında güncelliyoruz
         data["completed"] = new_status
         current_item.setData(Qt.UserRole, data)
         text = current_item.text()
         
-        if new_status: # Tamamlandıysa üstünü çiz, gri yap ve check at
+        if new_status:
             text = text.replace("☐", "☑", 1)
             font = current_item.font()
             font.setStrikeOut(True)
             current_item.setFont(font)
             current_item.setForeground(QColor("#71717a"))
-        else: # Geri alındıysa çizgiyi kaldır ve eski rengine döndür
+        else:
             text = text.replace("☑", "☐", 1)
             font = current_item.font()
             font.setStrikeOut(False)
             current_item.setFont(font)
             
-            # Eski kategorinin orjinal rengini geri ver
             if data["type"] == "plan":
                 cat_color = CATEGORIES.get(data.get("category", "Genel"), "#f59e0b")
                 current_item.setForeground(QColor(cat_color))
@@ -686,22 +677,40 @@ class CalendarView(QWidget):
                 
         current_item.setText(text)
         
-        # 3. Butonun anında "Tamamla" veya "Geri Al" formuna bürünmesi için sinyali tetikliyoruz
         self.on_event_selection_changed()
         
         if data["type"] == "plan":
+            if new_status:
+                if data.get("category") == "Kitap İade":
+                    # YENİ: İade Edildiğinde çıkan özel bildirim
+                    bus.item_saved.emit(f"'{data.get('title')}' iade edildi ve kitaplık güncellendi.")
+                else:
+                    bus.item_saved.emit("Plan başarıyla tamamlandı.")
             bus.calendar_changed.emit()
 
     def delete_event(self):
         current_item = self.events_list.currentItem()
         if not current_item:
-            play_action_sound("error")
+            try:
+                from core.sound import play_action_sound
+                play_action_sound("error")
+            except: pass
             QMessageBox.information(self, "Bilgi", "Lütfen sağdaki listeden silmek istediğiniz bir öğeyi seçin.")
             return
 
         data = current_item.data(Qt.UserRole)
         if not data or data.get("type") == "none":
             return
+
+        # --- YENİ EKLENEN KİTAP İADE SİLME ENGELİ ---
+        if data["type"] == "plan" and data.get("category") == "Kitap İade":
+            if not data.get("completed"):
+                try:
+                    from core.sound import play_action_sound
+                    play_action_sound("error")
+                except: pass
+                QMessageBox.warning(self, "Silme Engellendi 🛑", "Bu ödünç alınmış bir kitabın iade görevidir.\n\nKitabı iade etmeden (yanındaki kutucuğu işaretleyip tamamlamadan) takvimden silemezsiniz!")
+                return
 
         confirm = QMessageBox.question(
             self, "Silme Onayı",
@@ -719,13 +728,22 @@ class CalendarView(QWidget):
                 elif data["type"] == "exam":
                     cur.execute("DELETE FROM assessments WHERE id = ?", (data["id"],))
                 conn.commit()
-            play_action_sound("delete")
+
+            try:
+                from core.sound import play_action_sound
+                play_action_sound("delete")
+            except: pass
             self.refresh_calendar()
-            bus.item_deleted.emit(f"Takvimden '{data.get('title')}' öğesi silindi.")
             
             if data["type"] == "plan":
+                from core.events import bus
+                bus.item_deleted.emit(f"Takvimden '{data.get('title')}' öğesi silindi.")
                 bus.calendar_changed.emit()
             elif data["type"] == "class":
+                from core.events import bus
+                bus.item_deleted.emit(f"Takvimden '{data.get('title')}' öğesi silindi.")
                 bus.courses_changed.emit()
             elif data["type"] == "exam":
+                from core.events import bus
+                bus.item_deleted.emit(f"Takvimden '{data.get('title')}' öğesi silindi.")
                 bus.assessments_changed.emit()

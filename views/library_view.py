@@ -4,7 +4,7 @@ import random
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QDialog, QLineEdit, QComboBox,
-    QMessageBox, QFrame, QFileDialog, QCheckBox, QDateEdit
+    QMessageBox, QFrame, QFileDialog, QCheckBox, QDateEdit, QSpinBox
 )
 from PySide6.QtCore import Qt, QSize, QDate
 from PySide6.QtGui import QCursor, QPixmap, QColor
@@ -45,75 +45,100 @@ class BookCard(QFrame):
         lay.setContentsMargins(16, 14, 16, 14)
         lay.setSpacing(16)
 
-        # 1. Kitap Kapağı
+        # 1. Kapak Görseli
         self.lbl_cover = QLabel()
-        self.lbl_cover.setFixedSize(80, 115)
+        self.lbl_cover.setFixedSize(70, 100)
         self.lbl_cover.setStyleSheet("background-color: #27272a; border-radius: 6px; border: 1px solid #3f3f46;")
         self.lbl_cover.setAlignment(Qt.AlignCenter)
         
         cover_path = self.data.get("cover_path")
         if cover_path and os.path.exists(cover_path):
             pixmap = QPixmap(cover_path)
-            self.lbl_cover.setPixmap(pixmap.scaled(80, 115, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
+            self.lbl_cover.setPixmap(pixmap.scaled(70, 100, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
         else:
             self.lbl_cover.setText("📖")
-            self.lbl_cover.setStyleSheet("background-color: #27272a; font-size: 32px; border-radius: 6px; border: 1px solid #3f3f46;")
+            self.lbl_cover.setStyleSheet("background-color: #27272a; font-size: 28px; border-radius: 6px; border: 1px solid #3f3f46;")
         
         lay.addWidget(self.lbl_cover)
 
-        # 2. Kitap Bilgileri
+        # 2. Orta Bilgi Alanı (Başlık, Yazar, Sayfa, Rozetler)
         info_lay = QVBoxLayout()
-        info_lay.setSpacing(6)
+        info_lay.setSpacing(4)
         
         lbl_title = QLabel(self.data["title"])
         lbl_title.setStyleSheet("font-size: 16px; font-weight: 800; color: #ffffff;")
         lbl_title.setWordWrap(True)
         
         lbl_author = QLabel(self.data.get("author") or "Bilinmeyen Yazar")
-        lbl_author.setStyleSheet("font-size: 13px; color: #a1a1aa; font-weight: 600;")
+        lbl_author.setStyleSheet("font-size: 13px; color: #a1a1aa; font-weight: 500;")
+        
+        lbl_pages = QLabel(f"{self.data.get('page_count', 0)} Sayfa")
+        lbl_pages.setStyleSheet("font-size: 11px; color: #71717a;")
         
         info_lay.addWidget(lbl_title)
         info_lay.addWidget(lbl_author)
+        info_lay.addWidget(lbl_pages)
         info_lay.addStretch()
 
-        # Rozetler (Badge)
+        # --- ROZETLER ---
         badges_lay = QHBoxLayout()
         badges_lay.setSpacing(8)
         
         genre = self.data.get("genre") or "Diğer"
         lbl_genre = QLabel(genre)
         lbl_genre.setStyleSheet("background-color: #3b1d68; color: #d8b4fe; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px;")
+        badges_lay.addWidget(lbl_genre)
         
         status = self.data.get("status") or "Okunacak"
         status_colors = {
-            "Okunacak": ("rgba(245, 158, 11, 0.15)", "#f59e0b"),   
-            "Okunuyor": ("rgba(56, 189, 248, 0.15)", "#38bdf8"),   
-            "Okundu":   ("rgba(16, 185, 129, 0.15)", "#10b981")    
+            "Okunacak": ("rgba(245, 158, 11, 0.15)", "#f59e0b", "#f59e0b"),   
+            "Okunuyor": ("rgba(56, 189, 248, 0.15)", "#38bdf8", "#38bdf8"),   
+            "Okundu":   ("rgba(16, 185, 129, 0.15)", "#10b981", "#10b981")    
         }
-        bg_col, fg_col = status_colors.get(status, ("#27272a", "#ffffff"))
+        bg_col, fg_col, border_col = status_colors.get(status, ("#27272a", "#ffffff", "#3f3f46"))
         
         lbl_status = QLabel(status)
-        lbl_status.setStyleSheet(f"background-color: {bg_col}; color: {fg_col}; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid {fg_col};")
-        
-        badges_lay.addWidget(lbl_genre)
+        lbl_status.setStyleSheet(f"background-color: {bg_col}; color: {fg_col}; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid {border_col};")
         badges_lay.addWidget(lbl_status)
         
-        # --- ÖDÜNÇ KİTAP ROZETİ ---
+        # --- İADE / ÖDÜNÇ KONTROLÜ ---
+        active_return_event = self.has_active_return_event(self.data.get('title'))
+        
         if self.data.get("is_borrowed"):
-            lbl_borrow = QLabel(f"⏳ İade: {self.data.get('return_date')} | {self.data.get('return_location')}")
-            lbl_borrow.setStyleSheet("background-color: rgba(244, 63, 94, 0.15); color: #f43f5e; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid #f43f5e;")
-            badges_lay.addWidget(lbl_borrow)
+            if active_return_event:
+                return_dt_str = self.data.get('return_date', '')
+                try:
+                    dt_obj = QDate.fromString(return_dt_str, "yyyy-MM-dd")
+                    formatted_date = dt_obj.toString("dd.MM.yyyy")
+                except:
+                    formatted_date = return_dt_str
+                    
+                lbl_borrow = QLabel(f"⏳ İade: {formatted_date}")
+                lbl_borrow.setStyleSheet("background-color: rgba(244, 63, 94, 0.15); color: #f43f5e; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid #f43f5e;")
+                badges_lay.addWidget(lbl_borrow)
+            else:
+                lbl_borrow = QLabel("✅ İade Edildi / Teslim")
+                lbl_borrow.setStyleSheet("background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid #10b981;")
+                badges_lay.addWidget(lbl_borrow)
 
         badges_lay.addStretch()
         info_lay.addLayout(badges_lay)
         lay.addLayout(info_lay, stretch=1)
 
-        # 3. İşlem Butonları
+        # 3. Sağ Taraf İşlem Butonları
         btn_lay = QVBoxLayout()
-        btn_lay.setSpacing(6)
+        btn_lay.setAlignment(Qt.AlignTop | Qt.AlignRight)
+        btn_lay.setSpacing(8)
         
         btn_style = "font-weight: bold; border-radius: 6px; padding: 6px 14px; font-size: 12px; min-width: 90px;"
         
+        if self.data.get("is_borrowed") and active_return_event:
+            btn_return = QPushButton("📥 İade Et")
+            btn_return.setCursor(QCursor(Qt.PointingHandCursor))
+            btn_return.setStyleSheet(f"background-color: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; {btn_style}")
+            btn_return.clicked.connect(lambda: self.parent_view.return_borrowed_book(self.data["id"], self.data["title"]))
+            btn_lay.addWidget(btn_return)
+            
         pdf_path = self.data.get("pdf_path")
         if pdf_path and os.path.exists(pdf_path):
             btn_pdf = QPushButton("📕 PDF'i Aç")
@@ -130,12 +155,25 @@ class BookCard(QFrame):
         
         btn_delete = QPushButton("🗑 Sil")
         btn_delete.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_delete.setStyleSheet(f"background-color: transparent; color: #f87171; {btn_style}")
+        btn_delete.setStyleSheet(f"background-color: transparent; color: #f87171; border: none; {btn_style}")
         btn_delete.clicked.connect(lambda: self.parent_view.delete_book(self.data["id"]))
         btn_lay.addWidget(btn_delete)
         
         btn_lay.addStretch()
         lay.addLayout(btn_lay)
+
+    def has_active_return_event(self, title):
+        """Takvimde henüz silinmemiş VE tamamlanmamış aktif bir iade görevi var mı kontrol eder."""
+        with self.parent_view.db.get_connection() as conn:
+            cur = conn.cursor()
+            # is_completed = 0 şartı eklendi: Eğer takvimde tamamlandıysa burası False döner ve kitap iade edilmiş sayılır.
+            cur.execute(
+                "SELECT id FROM calendar_events WHERE title LIKE ? AND category = 'Kitap İade' AND is_completed = 0", 
+                (f"Kitap İadesi: {title}%",)
+            )
+            row = cur.fetchone()
+            return row is not None
+
 
 class LibraryView(QWidget):
     def __init__(self, db, main_window):
@@ -150,6 +188,8 @@ class LibraryView(QWidget):
             
         self.setup_tables()
         self.init_ui()
+        
+        bus.calendar_changed.connect(self.load_books)
 
     def setup_tables(self):
         with self.db.get_connection() as conn:
@@ -166,12 +206,13 @@ class LibraryView(QWidget):
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            # Yeni eklenen Ödünç Alma sütunları (Eski tabloyu bozmadan güvenle ekler)
             try: cur.execute("ALTER TABLE books ADD COLUMN is_borrowed INTEGER DEFAULT 0")
             except: pass
             try: cur.execute("ALTER TABLE books ADD COLUMN return_location TEXT")
             except: pass
             try: cur.execute("ALTER TABLE books ADD COLUMN return_date TEXT")
+            except: pass
+            try: cur.execute("ALTER TABLE books ADD COLUMN page_count INTEGER DEFAULT 0")
             except: pass
             
             conn.commit()
@@ -181,7 +222,6 @@ class LibraryView(QWidget):
         main_lay.setContentsMargins(24, 24, 24, 24)
         main_lay.setSpacing(16)
 
-        # Üst Başlık ve Filtreler
         header_lay = QHBoxLayout()
         
         title_box = QVBoxLayout()
@@ -206,7 +246,6 @@ class LibraryView(QWidget):
         
         main_lay.addLayout(header_lay)
 
-        # Filtre Çubuğu
         filter_bar = QHBoxLayout()
         filter_bar.setSpacing(10)
         
@@ -240,8 +279,8 @@ class LibraryView(QWidget):
         self.books_list.setResizeMode(QListWidget.Adjust) 
         self.books_list.setMovement(QListWidget.Static)
         self.books_list.setWrapping(True) 
-        self.books_list.setSpacing(16)
-        
+        self.books_list.setSpacing(18)
+        self.books_list.setUniformItemSizes(True) 
         self.books_list.setGridSize(QSize(560, 185)) 
         
         self.books_list.setStyleSheet("""
@@ -299,11 +338,32 @@ class LibraryView(QWidget):
             empty.setTextAlignment(Qt.AlignCenter)
             self.books_list.addItem(empty)
 
+    def return_borrowed_book(self, b_id: int, title: str):
+        confirm = QMessageBox.question(
+            self, "İade Onayı", 
+            f"'{title}' adlı kitabı iade ettiniz mi?\nTakvimdeki hatırlatıcı görev kalıcı olarak silinecektir.", 
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                event_title = f"Kitap İadesi: {title}%"
+                cur.execute("DELETE FROM calendar_events WHERE title LIKE ?", (event_title,))
+                conn.commit()
+            
+            try:
+                play_action_sound("complete")
+            except: pass
+            
+            bus.calendar_changed.emit()
+            bus.item_deleted.emit(f"'{title}' kitabının iade görevi başarıyla tamamlandı ve silindi.")
+            self.load_books()
+
     def dialog_add_edit_book(self, book_data=None):
         is_edit = book_data is not None
         dlg = QDialog(self)
         dlg.setWindowTitle("Kitabı Düzenle" if is_edit else "Yeni Kitap Ekle")
-        dlg.resize(400, 560)
+        dlg.resize(400, 590)
         lay = QVBoxLayout(dlg)
         lay.setSpacing(12)
 
@@ -322,8 +382,14 @@ class LibraryView(QWidget):
         status_cb.addItems(["Okunacak", "Okunuyor", "Okundu"])
         if is_edit and book_data.get("status"):
             status_cb.setCurrentText(book_data["status"])
+            
+        page_count_in = QSpinBox()
+        page_count_in.setRange(0, 10000)
+        page_count_in.setSuffix(" Sayfa")
+        page_count_in.setStyleSheet("background-color: #171412; border: 1px solid #3f3f46; color: white; padding: 4px; border-radius: 4px;")
+        if is_edit and book_data.get("page_count"):
+            page_count_in.setValue(int(book_data["page_count"]))
 
-        # --- ÖDÜNÇ KİTAP BÖLÜMÜ ---
         self.chk_borrowed = QCheckBox("Bu kitabı ödünç aldım (İade edilecek)")
         self.chk_borrowed.setStyleSheet("color: #f43f5e; font-weight: bold;")
         if is_edit and book_data.get("is_borrowed"):
@@ -337,7 +403,7 @@ class LibraryView(QWidget):
         self.return_date_in.setDisplayFormat("dd.MM.yyyy")
         if is_edit and book_data.get("return_date"):
             try:
-                self.return_date_in.setDate(QDate.fromString(book_data["return_date"], "dd.MM.yyyy"))
+                self.return_date_in.setDate(QDate.fromString(book_data["return_date"], "yyyy-MM-dd"))
             except:
                 self.return_date_in.setDate(QDate.currentDate().addDays(14))
         else:
@@ -354,7 +420,6 @@ class LibraryView(QWidget):
         
         self.borrow_widget.setVisible(self.chk_borrowed.isChecked())
         self.chk_borrowed.toggled.connect(self.borrow_widget.setVisible)
-        # --------------------------
 
         cover_lay = QHBoxLayout()
         cover_path_in = QLineEdit(book_data.get("cover_path") if is_edit else "")
@@ -367,7 +432,7 @@ class LibraryView(QWidget):
         pdf_lay = QHBoxLayout()
         pdf_path_in = QLineEdit(book_data.get("pdf_path") if is_edit else "")
         pdf_path_in.setReadOnly(True)
-        pdf_path_in.setPlaceholderText("PDF e-kitap dosyası (Opsiyonel)")
+        pdf_path_in.setPlaceholderText("PDF e-kitap (Opsiyonel)")
         btn_pdf = QPushButton("Gözat")
         pdf_lay.addWidget(pdf_path_in)
         pdf_lay.addWidget(btn_pdf)
@@ -385,10 +450,19 @@ class LibraryView(QWidget):
 
         lay.addWidget(QLabel("Kitap Adı:"))
         lay.addWidget(title_in)
-        lay.addWidget(QLabel("Yazar:"))
-        lay.addWidget(author_in)
-        lay.addWidget(QLabel("Tür:"))
-        lay.addWidget(genre_cb)
+        
+        row_lay1 = QHBoxLayout()
+        row_lay1.addWidget(QLabel("Yazar:"))
+        row_lay1.addWidget(author_in)
+        lay.addLayout(row_lay1)
+        
+        row_lay2 = QHBoxLayout()
+        row_lay2.addWidget(QLabel("Sayfa:"))
+        row_lay2.addWidget(page_count_in)
+        row_lay2.addWidget(QLabel("Tür:"))
+        row_lay2.addWidget(genre_cb)
+        lay.addLayout(row_lay2)
+        
         lay.addWidget(QLabel("Durum:"))
         lay.addWidget(status_cb)
         
@@ -413,6 +487,7 @@ class LibraryView(QWidget):
 
             c_path = cover_path_in.text()
             p_path = pdf_path_in.text()
+            p_count = page_count_in.value()
 
             if p_path and p_path.lower().endswith(".pdf") and not c_path:
                 if PYMUPDF_AVAILABLE:
@@ -424,8 +499,7 @@ class LibraryView(QWidget):
                         dest_cover = os.path.join(COVERS_DIR, cover_filename)
                         pix.save(dest_cover)
                         c_path = dest_cover
-                    except Exception as e:
-                        print(f"PDF'ten kapak çıkarılamadı: {e}")
+                    except Exception: pass
 
             if c_path and not c_path.startswith(COVERS_DIR):
                 filename = f"book_{random.randint(1000, 9999)}_{os.path.basename(c_path)}"
@@ -444,34 +518,48 @@ class LibraryView(QWidget):
                         cur.execute("INSERT INTO materials (course_id, file_name, file_path, file_type) VALUES (?, ?, ?, ?)",
                                     (None, f"{title_in.text().strip()} (E-Kitap)", p_path, "pdf"))
                         conn.commit()
-                        
                     if hasattr(self.main_window, "vault_view"):
                         self.main_window.vault_view.load_materials()
                 except: pass
 
-            # Ödünç Verilerini Hazırla
             is_borrow = 1 if self.chk_borrowed.isChecked() else 0
             r_loc = self.return_loc_in.text().strip() if is_borrow else ""
-            r_date = self.return_date_in.date().toString("dd.MM.yyyy") if is_borrow else ""
+            r_date_iso = self.return_date_in.date().toString("yyyy-MM-dd") if is_borrow else ""
 
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
                 if is_edit:
                     cur.execute("""
                         UPDATE books 
-                        SET title=?, author=?, genre=?, status=?, cover_path=?, pdf_path=?, is_borrowed=?, return_location=?, return_date=?
+                        SET title=?, author=?, genre=?, status=?, cover_path=?, pdf_path=?, is_borrowed=?, return_location=?, return_date=?, page_count=?
                         WHERE id=?
                     """, (title_in.text().strip(), author_in.text().strip(), genre_cb.currentText(), 
-                          status_cb.currentText(), c_path, p_path, is_borrow, r_loc, r_date, book_data["id"]))
+                          status_cb.currentText(), c_path, p_path, is_borrow, r_loc, r_date_iso, p_count, book_data["id"]))
                 else:
                     cur.execute("""
-                        INSERT INTO books (title, author, genre, status, cover_path, pdf_path, is_borrowed, return_location, return_date)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO books (title, author, genre, status, cover_path, pdf_path, is_borrowed, return_location, return_date, page_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (title_in.text().strip(), author_in.text().strip(), genre_cb.currentText(), 
-                          status_cb.currentText(), c_path, p_path, is_borrow, r_loc, r_date))
+                          status_cb.currentText(), c_path, p_path, is_borrow, r_loc, r_date_iso, p_count))
                 conn.commit()
 
-            play_action_sound("save")
+            # Takvime Genel kategorisinde ekle
+            if is_borrow and r_date_iso:
+                event_title = f"Kitap İadesi: {title_in.text().strip()} ({r_loc})"
+                with self.db.get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT id FROM calendar_events WHERE title = ?", (event_title,))
+                    if not cur.fetchone():
+                        cur.execute("""
+                            INSERT INTO calendar_events (title, event_date, start_time, end_time, category, is_completed)
+                            VALUES (?, ?, '09:00', '10:00', 'Kitap İade', 0)
+                        """, (event_title, r_date_iso))
+                        conn.commit()
+                        bus.calendar_changed.emit()
+
+            try:
+                play_action_sound("save")
+            except: pass
             dlg.accept()
             self.load_books()
 
@@ -483,7 +571,7 @@ class LibraryView(QWidget):
         if confirm == QMessageBox.Yes:
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
-                row = cur.execute("SELECT cover_path, pdf_path FROM books WHERE id = ?", (b_id,)).fetchone()
+                row = cur.execute("SELECT title, return_location, cover_path, pdf_path FROM books WHERE id = ?", (b_id,)).fetchone()
                 if row:
                     if row["cover_path"] and os.path.exists(row["cover_path"]):
                         try: os.remove(row["cover_path"])
@@ -491,24 +579,27 @@ class LibraryView(QWidget):
                     if row["pdf_path"] and os.path.exists(row["pdf_path"]):
                         try: os.remove(row["pdf_path"])
                         except: pass
+                    
+                    event_title = f"Kitap İadesi: {row['title']}%"
+                    cur.execute("DELETE FROM calendar_events WHERE title LIKE ?", (event_title,))
                         
                 cur.execute("DELETE FROM books WHERE id = ?", (b_id,))
                 conn.commit()
                 
-            play_action_sound("delete")
+            bus.calendar_changed.emit()
+            try:
+                play_action_sound("delete")
+            except: pass
             self.load_books()
 
     def open_pdf_in_vault(self, pdf_path):
         if not hasattr(self.main_window, "vault_view"): return
-        
         self.main_window.navigate_to(4)
         vault = self.main_window.vault_view
-        
         vault.course_filter_cb.blockSignals(True)
         vault.course_filter_cb.setCurrentIndex(0) 
         vault.course_filter_cb.blockSignals(False)
         vault.load_materials()
-        
         materials_list = vault.materials_list
         for i in range(materials_list.count()):
             item = materials_list.item(i)
