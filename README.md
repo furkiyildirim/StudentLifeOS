@@ -1,5 +1,3 @@
-Tabii. Metni Markdown yapısını düzelterek, hatalı `cite` ifadelerini ve bozuk link formatlarını temizleyip **GitHub README.md'ye doğrudan kopyalayabileceğin** şekilde düzenledim.
-
 ````markdown
 # Student Life OS
 
