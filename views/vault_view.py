@@ -839,22 +839,42 @@ class VaultView(QWidget):
 
     def delete_active_material(self):
         item = self.materials_list.currentItem()
-        if not item: return
+        if not item:
+            QMessageBox.information(self, "Bilgi", "Lütfen listeden silmek istediğiniz dosyayı seçin.")
+            return
 
         data = item.data(Qt.UserRole)
-        confirm = QMessageBox.question(self, "Sil", f"'{data['file_name']}' kalıcı olarak silinecek. Emin misiniz?", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(
+            self, "Dosya Silinecek",
+            f"'{data['file_name']}' sistemden kalıcı olarak silinecek. Emin misiniz?",
+            QMessageBox.Yes | QMessageBox.No
+        )
 
         if confirm == QMessageBox.Yes:
             with self.db.get_connection() as conn:
-                conn.cursor().execute("DELETE FROM materials WHERE id = ?", (data["id"],))
+                cur = conn.cursor()
+                
+                # GÜNCELLEME: Eğer silinen bu dosya bir kitap PDF'i ise, kitaptaki bağlantıyı kopar.
+                cur.execute("UPDATE books SET pdf_path = '' WHERE pdf_path = ?", (data["file_path"],))
+                
+                # Dosyayı materyal havuzundan (veritabanından) tamamen sil
+                cur.execute("DELETE FROM materials WHERE id = ?", (data["id"],))
                 conn.commit()
+
             play_action_sound("delete")
+
             if os.path.exists(data["file_path"]):
-                try: os.remove(data["file_path"])
-                except: pass
+                try:
+                    os.remove(data["file_path"])
+                except Exception as e:
+                    print(f"Uyarı: Yerel dosya silinemedi - {e}")
 
             self.viewer_stack.setCurrentIndex(0)
             self.load_materials()
+            
+            # GÜNCELLEME: Kitaplığı anında yenile ki oradaki 'PDF'i Aç' butonu kaybolsun
+            if hasattr(self.main_window, "library_view"):
+                self.main_window.library_view.load_books()
 
     def preview_material(self, item):
         data = item.data(Qt.UserRole)

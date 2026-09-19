@@ -31,51 +31,19 @@ class UniversityView(QWidget):
             "Gazi Üniversitesi": "https://obs.gazi.edu.tr/",
             "Yıldız Teknik Üniversitesi": "https://obs.yildiz.edu.tr/",
             "Ege Üniversitesi": "https://kimlik.ege.edu.tr/",
-            "İstanbul Üniversitesi (ÖYS/OBS)": "https://obis.istanbul.edu.tr/",
-            "Marmara Üniversitesi": "https://bys.marmara.edu.tr/",
-            "Dokuz Eylül Üniversitesi": "https://debis.deu.edu.tr/",
-            "Akdeniz Üniversitesi": "https://obs.akdeniz.edu.tr/",
-            "Erciyes Üniversitesi": "https://obisis.erciyes.edu.tr/",
-            "Selçuk Üniversitesi": "https://aes.selcuk.edu.tr/",
-            "Çukurova Üniversitesi": "https://obs.cu.edu.tr/",
-            "Karadeniz Teknik Üniversitesi": "https://bys.ktu.edu.tr/",
-            "Sakarya Üniversitesi": "https://sabis.sakarya.edu.tr/",
-            "Eskişehir Osmangazi Üniversitesi": "https://oibs.ogu.edu.tr/",
-            "Anadolu Üniversitesi": "https://aosogrenci.anadolu.edu.tr/",
-            "Atatürk Üniversitesi": "https://obs.atauni.edu.tr/",
-            "İnönü Üniversitesi": "https://obs.inonu.edu.tr/",
-            "Fırat Üniversitesi": "https://obs.firat.edu.tr/",
-            "Kocaeli Üniversitesi": "https://odb.kocaeli.edu.tr/",
-            "Bursa Uludağ Üniversitesi": "https://ukey.uludag.edu.tr/",
-            "Bilkent Üniversitesi": "https://stars.bilkent.edu.tr/",
-            "Sabancı Üniversitesi": "https://bannerweb.sabanciuniv.edu/",
             "Farklı Bir Üniversite (URL Girin)": "https://"
         }
 
         self.mail_list = {
             "Microsoft Outlook (Üniversitelerin Çoğu)": "https://outlook.office365.com/mail/",
             "Google Workspace (Öğrenci Gmail)": "https://mail.google.com/",
-            "İTÜ Öğrenci E-Posta": "https://webmail.itu.edu.tr/",
-            "ODTÜ Öğrenci E-Posta": "https://mail.metu.edu.tr/",
-            "Boğaziçi Üniversitesi E-Posta": "https://mail.bogazici.edu.tr/",
-            "Hacettepe Üniversitesi E-Posta": "https://mail.hacettepe.edu.tr/",
-            "Ankara Üniversitesi E-Posta": "https://mail.ankara.edu.tr/",
-            "İstanbul Üniversitesi E-Posta": "https://mail.istanbul.edu.tr/",
-            "Marmara Üniversitesi E-Posta": "https://posta.marmara.edu.tr/",
-            "Yıldız Teknik Üniversitesi E-Posta": "https://mail.yildiz.edu.tr/",
-            "Ege Üniversitesi E-Posta": "https://mail.ege.edu.tr/",
-            "Erciyes Üniversitesi E-Posta": "https://mail.erciyes.edu.tr/",
-            "Kocaeli Üniversitesi E-Posta": "https://mail.kocaeli.edu.tr/",
-            "Zoho Mail": "https://mail.zoho.com/",
-            "Proton Mail": "https://mail.proton.me/",
             "Farklı Webmail (URL Girin)": "https://"
         }
 
         self.is_offline = False
         
-        # Zorlu Dönem (Auto-Retry) Zamanlayıcısı
         self.retry_timer = QTimer(self)
-        self.retry_timer.setInterval(5000) # Spam yememek için güvenli bekleme süresi (5 saniye)
+        self.retry_timer.setInterval(5000)
         self.retry_timer.timeout.connect(self.check_and_reload_obs)
         self.is_retrying = False
 
@@ -115,7 +83,6 @@ class UniversityView(QWidget):
                 if hasattr(self, 'mail_stack'):
                     self.mail_stack.setCurrentIndex(index)
                     
-                # Eğer internet giderse Zorlu Dönem modunu otomatik durdur
                 if self.is_offline and self.is_retrying:
                     self.toggle_retry_mode()
         except Exception:
@@ -136,8 +103,8 @@ class UniversityView(QWidget):
         lbl_off_title.addWidget(lbl_icon)
         lbl_off_title.addWidget(lbl_text)
 
-        lbl_desc = QLabel("Üniversite sistemlerine (OBS ve E-Posta) bağlanabilmek için aktif\nbir internet bağlantısı gereklidir.\nLütfen internet bağlantınızı kontrol edip tekrar deneyin.")
-        lbl_desc.setStyleSheet("color: #a1a1aa; font-size: 15px; line-height: 1.5; background: transparent;")
+        lbl_desc = QLabel("Üniversite sistemlerine bağlanabilmek için aktif bir internet bağlantısı gereklidir.")
+        lbl_desc.setStyleSheet("color: #a1a1aa; font-size: 15px; background: transparent;")
         lbl_desc.setAlignment(Qt.AlignCenter)
         
         off_lay.addStretch()
@@ -178,19 +145,16 @@ class UniversityView(QWidget):
         btn_go.clicked.connect(self.load_obs_url)
         top_bar.addWidget(btn_go)
 
-        # ZORLU DÖNEM BUTONU
         self.btn_retry = QPushButton("🚀 Zorlu Dönem")
         self.btn_retry.setFixedHeight(34)
         self.btn_retry.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_retry.setStyleSheet("background-color: #f59e0b; color: #12100e; font-weight: bold; border-radius: 6px; padding: 0 15px;")
-        self.btn_retry.setToolTip("Sistem çöktüğünde veya yoğunluktan açılmadığında otomatik bağlanmayı dener.")
         self.btn_retry.clicked.connect(self.toggle_retry_mode)
         top_bar.addWidget(self.btn_retry)
 
         lay.addLayout(top_bar)
 
         self.obs_stack = QStackedWidget()
-
         self.obs_webview = CustomWebEngineView()
         self.obs_webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -201,7 +165,7 @@ class UniversityView(QWidget):
         self.obs_profile = QWebEngineProfile("UniOBSProfile", self.obs_webview)
         self.obs_profile.setPersistentStoragePath(profile_path)
         self.obs_profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
-        
+
         settings = self.obs_profile.settings()
         settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
         settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
@@ -209,8 +173,6 @@ class UniversityView(QWidget):
 
         self.obs_page = QWebEnginePage(self.obs_profile, self.obs_webview)
         self.obs_webview.setPage(self.obs_page)
-        
-        # Sayfa yüklenmesi bittiğinde başarılı olup olmadığını kontrol et
         self.obs_webview.loadFinished.connect(self.on_obs_load_finished)
         
         self.obs_stack.addWidget(self.obs_webview)
@@ -223,57 +185,33 @@ class UniversityView(QWidget):
 
         return tab
 
-    # =========================================================================
-    # ZORLU DÖNEM MANTIĞI (AUTO-RETRY)
-    # =========================================================================
     def toggle_retry_mode(self):
         self.is_retrying = not self.is_retrying
         
         if self.is_retrying:
             if self.is_offline:
                 self.is_retrying = False
-                main_win = self.window()
-                if hasattr(main_win, 'send_tray_notification'):
-                    main_win.send_tray_notification("Hata ⚠️", "Çevrimdışıyken Zorlu Dönem modu başlatılamaz.", color="#ef4444")
                 return
-                
             self.btn_retry.setText("🛑 Durdur (Deneniyor...)")
             self.btn_retry.setStyleSheet("background-color: #ef4444; color: white; font-weight: bold; border-radius: 6px; padding: 0 15px;")
             self.retry_timer.start()
             self.obs_webview.reload()
-            
-            main_win = self.window()
-            if hasattr(main_win, 'send_tray_notification'):
-                main_win.send_tray_notification("Zorlu Dönem Aktif 🚀", "OBS sistemi çökükse bile 5 saniyede bir otomatik denenecek.", color="#f59e0b")
         else:
             self.btn_retry.setText("🚀 Zorlu Dönem")
             self.btn_retry.setStyleSheet("background-color: #f59e0b; color: #12100e; font-weight: bold; border-radius: 6px; padding: 0 15px;")
             self.retry_timer.stop()
 
     def check_and_reload_obs(self):
-        # Eğer sayfa yüklenemiyorsa (veya beyaz/hata sayfasındaysa) otomatik yenilemeye devam et
         if self.main_stack.currentIndex() == 1 and self.is_retrying:
             self.obs_webview.reload()
 
     def on_obs_load_finished(self, success):
-        if not self.is_retrying:
-            return
-            
-        # Eğer sayfa HTTP hataları olmadan başarıyla yüklendiyse ve zorlu dönem modundaysak
+        if not self.is_retrying: return
         if success:
-            # Sayfanın başlığını kontrol ederek gerçek bir giriş sayfası mı yoksa "502 Bad Gateway" veya çökme ekranı mı olduğunu kontrol et
             title = self.obs_webview.title().lower()
-            if "error" not in title and "gateway" not in title and "timeout" not in title and "ulaşılamıyor" not in title:
-                # Başarılı bir şekilde giriş sayfasına ulaştı
-                self.toggle_retry_mode() # Yenilemeyi durdur
-                main_win = self.window()
-                if hasattr(main_win, 'send_tray_notification'):
-                    main_win.send_tray_notification("Giriş Başarılı! ✅", "Zorlu dönem atlatıldı, OBS sistemine başarıyla ulaşıldı.", color="#10b981")
+            if "error" not in title and "gateway" not in title and "ulaşılamıyor" not in title:
+                self.toggle_retry_mode()
 
-
-    # =========================================================================
-    # DİĞER FONKSİYONLAR (DEĞİŞTİRİLMEDİ)
-    # =========================================================================
     def update_obs_url(self):
         uni_name = self.obs_combo.currentText()
         url = self.obs_list.get(uni_name, "https://")
@@ -292,7 +230,6 @@ class UniversityView(QWidget):
         lay.setSpacing(10)
 
         top_bar = QHBoxLayout()
-        
         lbl = QLabel("Altyapı Seç:")
         lbl.setStyleSheet("font-weight: bold; color: #a1a1aa;")
         top_bar.addWidget(lbl)
@@ -319,7 +256,6 @@ class UniversityView(QWidget):
         lay.addLayout(top_bar)
 
         self.mail_stack = QStackedWidget()
-
         self.mail_webview = CustomWebEngineView()
         self.mail_webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
@@ -330,7 +266,7 @@ class UniversityView(QWidget):
         self.mail_profile = QWebEngineProfile("UniMailProfile", self.mail_webview)
         self.mail_profile.setPersistentStoragePath(profile_path)
         self.mail_profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
-        
+
         settings = self.mail_profile.settings()
         settings.setAttribute(QWebEngineSettings.PluginsEnabled, True)
         settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)

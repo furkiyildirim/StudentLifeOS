@@ -374,10 +374,11 @@ class DashboardView(QWidget):
         self.btn_semester.setStyleSheet("text-align: left; font-size: 13px; color: #fbbf24; font-weight: bold; background: rgba(251, 191, 36, 0.15); padding: 4px 8px; border-radius: 6px; margin-top: 4px; border: 1px solid rgba(251, 191, 36, 0.3);")
         self.btn_semester.clicked.connect(self.dialog_set_semester_dates)
         
+        # Sadece temel bilgileri dar kutuya ekliyoruz
         title_box.addWidget(self.lbl_greet)
         title_box.addWidget(self.lbl_clock)
         title_box.addWidget(self.lbl_weather)
-        title_box.addWidget(self.btn_semester) # Kutuya eklendi
+        title_box.addWidget(self.btn_semester) 
         
         header_row.addLayout(title_box)
         header_row.addStretch()
@@ -398,7 +399,17 @@ class DashboardView(QWidget):
 
         header_row.addWidget(btn_quick_note)
         header_row.addWidget(btn_quick_plan)
+        
+        # Başlık sırasını ana ekrana ekle
         self.content_lay.addLayout(header_row)
+
+        # --- GÜNÜN SÖZÜ (Tam Genişlikte Yataya Yayılır) ---
+        self.lbl_quote = QLabel()
+        self.lbl_quote.setWordWrap(True)
+        self.lbl_quote.setStyleSheet("font-size: 13.5px; font-style: italic; color: #f59e0b; padding: 4px 0px 8px 0px;")
+        
+        # Günün sözünü butonların altındaki yepyeni bir tam genişlik satırına ekliyoruz
+        self.content_lay.addWidget(self.lbl_quote)
         self.content_lay.addWidget(self.create_section_divider())
 
         # 2. KPI Rozetleri
@@ -435,6 +446,9 @@ class DashboardView(QWidget):
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
 
+        # Günün Sözünü Ayarla
+        self._set_daily_quote()
+
         # --- DİNAMİK ZAMANLAYICILAR ---
         self.clock_timer = QTimer(self)
         self.clock_timer.timeout.connect(self.update_clock)
@@ -457,72 +471,28 @@ class DashboardView(QWidget):
 
         self.refresh()
 
-    def dialog_set_semester_dates(self):
-        from PySide6.QtWidgets import QDateEdit
-        from PySide6.QtCore import QDate
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Dönem Tarihlerini Belirle")
-        dlg.resize(300, 150)
-        lay = QVBoxLayout(dlg)
+    def _set_daily_quote(self):
+        import random
+        quotes = [
+            "“Her şey seninle başlar.” – Mümin Sekman",
+            "“Büyük işler başarmak için önce hayal etmeliyiz, sonra planlamalıyız, sonra inanmalıyız, sonra da harekete geçmeliyiz.”",
+            "“Başlamak için mükemmel olmayı beklemeyin. Mükemmel olmak için başlayın.”",
+            "“Başarının sırrı, sıradan şeyleri sıra dışı yapmaktır.” – John D. Rockefeller",
+            "“Gelecek, bugünden ona hazırlananlara aittir.” – Malcolm X",
+            "“Başarısızlık, daha akıllıca başlamak için bir fırsattır.” – Henry Ford",
+            "“Zorluklar, karakteri ortaya çıkarır.” – Epiktetos",
+            "“Yapabileceğinize de inansanız, yapamayacağınıza da inansanız haklısınız.” – Henry Ford",
+            "“Düşüncelerini değiştir, dünyan değişsin.” – Norman Vincent Peale",
+            "“Hiçbir zaman pes etme, kaybedenler hep pes edenlerdir.”",
+            "“Eğitim, dünyayı değiştirmek için kullanabileceğiniz en güçlü silahtır.” – Nelson Mandela",
+            "“Sınırları zorlamadıkça neleri başarabileceğini asla bilemezsin.”"
+        ]
         
-        start_dt = QDateEdit()
-        start_dt.setCalendarPopup(True)
-        start_dt.setDisplayFormat("dd.MM.yyyy")
-        end_dt = QDateEdit()
-        end_dt.setCalendarPopup(True)
-        end_dt.setDisplayFormat("dd.MM.yyyy")
-        
-        s_str, e_str = self._get_semester_bounds()
-        if s_str and s_str != "0001-01-01":
-            try: start_dt.setDate(QDate.fromString(s_str, "yyyy-MM-dd"))
-            except: start_dt.setDate(QDate.currentDate())
-        else:
-            start_dt.setDate(QDate.currentDate())
-            
-        if e_str and e_str != "9999-12-31":
-            try: end_dt.setDate(QDate.fromString(e_str, "yyyy-MM-dd"))
-            except: end_dt.setDate(QDate.currentDate().addMonths(4))
-        else:
-            end_dt.setDate(QDate.currentDate().addMonths(4))
-            
-        lay.addWidget(QLabel("Dönem Başlangıç Tarihi:"))
-        lay.addWidget(start_dt)
-        lay.addWidget(QLabel("Dönem Bitiş Tarihi:"))
-        lay.addWidget(end_dt)
-        
-        btn_save = QPushButton("Kaydet")
-        btn_save.setObjectName("AccentButton")
-        lay.addWidget(btn_save)
-        
-        def save():
-            with self.db.get_connection() as conn:
-                cur = conn.cursor()
-                s_val = start_dt.date().toString("yyyy-MM-dd")
-                e_val = end_dt.date().toString("yyyy-MM-dd")
-                
-                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'semester_start_date'")
-                if cur.fetchone():
-                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'semester_start_date'", (s_val,))
-                else:
-                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_start_date', ?)", (s_val,))
-                    
-                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'semester_end_date'")
-                if cur.fetchone():
-                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'semester_end_date'", (e_val,))
-                else:
-                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES ('semester_end_date', ?)", (e_val,))
-                conn.commit()
-                
-            dlg.accept()
-            self.refresh()
-            try:
-                from core.sound import play_action_sound
-                play_action_sound("save")
-            except: pass
-            
-        btn_save.clicked.connect(save)
-        dlg.exec()
+        # Güne özel rastgeleliği sabitle (Aynı gün içinde hep aynı söz çıkar)
+        seed = int(datetime.now().strftime("%Y%m%d"))
+        rng = random.Random(seed)
+        daily_quote = rng.choice(quotes)
+        self.lbl_quote.setText(daily_quote)
 
     def dialog_set_semester_dates(self):
         from PySide6.QtWidgets import QDateEdit
@@ -540,7 +510,6 @@ class DashboardView(QWidget):
         end_dt.setCalendarPopup(True)
         end_dt.setDisplayFormat("dd.MM.yyyy")
         
-        # Mevcut veritabanı ayarlarını çek
         s_str, e_str = self._get_semester_bounds()
         if s_str and s_str != "0001-01-01":
             try: start_dt.setDate(QDate.fromString(s_str, "yyyy-MM-dd"))

@@ -3,23 +3,22 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QPushButton, QDialog, QLineEdit, QComboBox,
     QSpinBox, QDoubleSpinBox, QMessageBox, QHeaderView, QTabWidget,
     QFrame, QScrollArea, QAbstractItemView, QMenu, QStyledItemDelegate, QStyle,
-    QDateEdit, QGridLayout, QDateTimeEdit, QCalendarWidget
+    QGridLayout, QDateTimeEdit
 )
-
 from PySide6.QtGui import QCursor, QColor, QDrag, QBrush
-from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer, QDate, QDateTime, QLocale
+from PySide6.QtCore import Qt, Signal, QMimeData, QByteArray, QDataStream, QIODevice, QTimer, QDate, QDateTime
+
 from core.sound import play_action_sound
 from core.events import bus
 
 DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
 
 COLORS_PALETTE = [
-    ("Açık Mavi", "#38bdf8"), ("Zümrüt Yeşili", "#10b981"), ("Mor", "#a855f7"),
+    ("Mavi", "#38bdf8"), ("Zümrüt Yeşili", "#10b981"), ("Mor", "#a855f7"),
     ("Turuncu", "#f59e0b"), ("Kırmızı", "#f43f5e"), ("Sarı", "#eab308"),
     ("Pembe", "#ec4899"), ("Okyanus", "#0ea5e9"), ("Gece Mavisi", "#1e3a8a"),
-    ("Gül Kurusu", "#be123c"), ("Orman Yeşili", "#15803d"), ("Koyu Mor", "#581c87"),
-    ("Turkuaz", "#14b8a6"), ("Kiremit", "#b91c1c"), ("Altın", "#ca8a04"),
-    ("Gri", "#71717a"), ("Lila", "#c084fc"), ("Gece Siyahı", "#171717")
+    ("Gül Kurusu", "#be123c"), ("Orman Yeşili", "#15803d"), ("Turkuaz", "#14b8a6"),
+    ("Koyu Mor", "#581c87"), ("Altın", "#ca8a04"), ("Gri", "#71717a")
 ]
 
 class TimetableColorDelegate(QStyledItemDelegate):
@@ -69,6 +68,7 @@ class PersonalPlanDelegate(QStyledItemDelegate):
                 index.model().setData(index, "", Qt.EditRole)
         editor.textChanged.connect(clear_model_value)
         return editor
+        
     def paint(self, painter, option, index):
         text = index.data(Qt.DisplayRole)
         is_selected = bool(option.state & QStyle.State_Selected)
@@ -77,16 +77,12 @@ class PersonalPlanDelegate(QStyledItemDelegate):
         cell_rect = option.rect.adjusted(2, 2, -2, -2)
         
         if text:
-            # 1. Yarı saydam arka plan (Mor tonu)
             bg_color = QColor("#8b5cf6")
             bg_color.setAlpha(40)
             painter.fillRect(cell_rect, bg_color)
-            
-            # 2. Sol belirteç çizgisi
             border_color = QColor("#8b5cf6")
             painter.fillRect(cell_rect.x(), cell_rect.y(), 3, cell_rect.height(), border_color)
             
-            # 3. Metin
             painter.setPen(QColor("#ffffff"))
             font = painter.font()
             font.setPointSize(9)
@@ -98,21 +94,17 @@ class PersonalPlanDelegate(QStyledItemDelegate):
                 str(text)
             )
         else:
-            # Boş hücreyi varsayılan çiz
             super().paint(painter, option, index)
             
-        # 4. Seçim efekti
         if is_selected:
             painter.save()
             painter.setPen(QColor("#38bdf8"))
             painter.drawRect(option.rect.adjusted(1, 1, -2, -2))
             painter.restore()
-            
         painter.restore()
 
 class PersonalPlanTableWidget(QTableWidget):
     def keyPressEvent(self, event):
-        # 'Delete' veya 'Backspace' tuşlarına basıldığında seçili hücreleri anında siler
         if event.key() in (Qt.Key_Delete, Qt.Key_Backspace):
             for item in self.selectedItems():
                 item.setText("")
@@ -171,7 +163,6 @@ class InteractiveTimetableWidget(QTableWidget):
             b_array = event.mimeData().data("application/x-timetable-slot")
             stream = QDataStream(b_array, QIODevice.ReadOnly)
             slot_id = stream.readInt32()
-
             pos = event.position().toPoint()
             target_col = self.columnAt(pos.x())
             if 0 <= target_col < 7:
@@ -246,7 +237,7 @@ class AssessmentCard(QFrame):
         lbl_title.setStyleSheet("font-size: 14px; color: #ffffff;")
         
         due = self.data.get("due_date", "")
-        lbl_date = QLabel(f"📅 Teslim / Sınav Tarihi: {due}")
+        lbl_date = QLabel(f"📅 Tarih: {due}")
         lbl_date.setStyleSheet("font-size: 11px; color: #a1a1aa;")
         
         info_lay.addWidget(lbl_title)
@@ -283,7 +274,7 @@ class AssessmentCard(QFrame):
         lbl_score.setAlignment(Qt.AlignCenter)
         lay.addWidget(lbl_score)
 
-        btn_score = QPushButton("Notu Güncelle" if score is not None else "Not Gir")
+        btn_score = QPushButton("Güncelle" if score is not None else "Not Gir")
         btn_score.setCursor(QCursor(Qt.PointingHandCursor))
         btn_score.setStyleSheet("padding: 5px 12px; font-size: 12px; font-weight: 600;")
         btn_score.clicked.connect(self.dialog_enter_score)
@@ -312,7 +303,6 @@ class AssessmentCard(QFrame):
 
         btn_save = QPushButton("Kaydet")
         btn_save.setObjectName("AccentButton")
-        btn_save.setCursor(QCursor(Qt.PointingHandCursor))
         lay.addWidget(btn_save)
 
         def save():
@@ -322,12 +312,11 @@ class AssessmentCard(QFrame):
         btn_save.clicked.connect(save)
         dlg.exec()
 
+
 class TimetableView(QWidget):
     def __init__(self, db):
         super().__init__()
         self.db = db
-        
-        # Gelecek 6 yılı ve geçmiş 3 yılı dinamik olarak oluştur (Toplam 10 yıllık menzil)
         curr_y = QDate.currentDate().year()
         if QDate.currentDate().month() < 8: curr_y -= 1
         self.default_year = f"{curr_y}-{curr_y+1}"
@@ -337,7 +326,6 @@ class TimetableView(QWidget):
         self.init_ui()
 
     def run_migrations(self):
-        """Veritabanına Dönem sütunlarını ekler ve 'UNIQUE' (Benzersizlik) kısıtlamasını kaldırır."""
         with self.db.get_connection() as conn:
             cur = conn.cursor()
             cur.execute("PRAGMA foreign_keys = OFF")
@@ -349,9 +337,8 @@ class TimetableView(QWidget):
             ]
             for mig in migrations:
                 try: cur.execute(mig)
-                except Exception: pass
+                except: pass
             
-            # UNIQUE Hatasını çözmek için 'courses' tablosu kısıtlama olmadan yeniden yaratılıyor
             cur.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='courses'")
             create_sql = cur.fetchone()
             if create_sql and "UNIQUE" in create_sql[0].upper():
@@ -371,8 +358,7 @@ class TimetableView(QWidget):
                     """)
                     cur.execute("DROP TABLE courses")
                     cur.execute("ALTER TABLE courses_new RENAME TO courses")
-                except Exception as e:
-                    print("Migration Error:", e)
+                except: pass
                     
             cur.execute("PRAGMA foreign_keys = ON")
             conn.commit()
@@ -398,22 +384,20 @@ class TimetableView(QWidget):
         btn_add_course = QPushButton("🎓  Yeni Ders Tanımla")
         btn_add_course.setObjectName("PrimaryCourseButton")
         btn_add_course.setMinimumHeight(42)
-        btn_add_course.setMinimumWidth(190)
         btn_add_course.setCursor(QCursor(Qt.PointingHandCursor))
         btn_add_course.setStyleSheet("""
-            QPushButton#PrimaryCourseButton { background-color: #38bdf8; color: #082f49; border: 1px solid #7dd3fc; border-radius: 9px; padding: 9px 18px; font-size: 13px; font-weight: 800; }
-            QPushButton#PrimaryCourseButton:hover { background-color: #7dd3fc; border-color: #bae6fd; }
+            QPushButton#PrimaryCourseButton { background-color: #38bdf8; color: #082f49; border-radius: 9px; padding: 9px 18px; font-weight: 800; }
+            QPushButton#PrimaryCourseButton:hover { background-color: #7dd3fc; }
         """)
         btn_add_course.clicked.connect(self.dialog_add_course)
 
         btn_add_slot = QPushButton("🕒  Çizelgeye Ders Ekle")
         btn_add_slot.setObjectName("SecondaryScheduleButton")
         btn_add_slot.setMinimumHeight(42)
-        btn_add_slot.setMinimumWidth(200)
         btn_add_slot.setCursor(QCursor(Qt.PointingHandCursor))
         btn_add_slot.setStyleSheet("""
-            QPushButton#SecondaryScheduleButton { background-color: #14532d; color: #dcfce7; border: 1px solid #22c55e; border-radius: 9px; padding: 9px 16px; font-size: 13px; font-weight: 800; }
-            QPushButton#SecondaryScheduleButton:hover { background-color: #166534; border-color: #4ade80; color: #f0fdf4; }
+            QPushButton#SecondaryScheduleButton { background-color: #14532d; color: #dcfce7; border: 1px solid #22c55e; border-radius: 9px; padding: 9px 16px; font-weight: 800; }
+            QPushButton#SecondaryScheduleButton:hover { background-color: #166534; }
         """)
         btn_add_slot.clicked.connect(self.dialog_add_schedule)
 
@@ -426,7 +410,6 @@ class TimetableView(QWidget):
         self.filter_term = QComboBox()
         self.filter_term.addItems(["Güz", "Bahar", "Yaz"])
         
-        # Otomatik olarak Güz veya Bahar dönemini belirle
         curr_month = QDate.currentDate().month()
         if 2 <= curr_month <= 6: self.filter_term.setCurrentText("Bahar")
         elif 7 <= curr_month <= 8: self.filter_term.setCurrentText("Yaz")
@@ -484,7 +467,6 @@ class TimetableView(QWidget):
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            # COALESCE kullanarak hücre boşsa (NULL veya '') ana dersin bilgilerini çekiyoruz
             cur.execute("""
                   SELECT t.id, t.day_of_week, t.start_time, t.end_time, t.cell_color,
                       c.code, c.name, c.credit,
@@ -506,9 +488,8 @@ class TimetableView(QWidget):
             if row_idx < 8:
                 c_color = s["cell_color"] if s["cell_color"] else (s["color_hex"] if s["color_hex"] else "#38bdf8")
                 
-                # Boş gelme ihtimaline karşı son bir güvenlik duvarı
-                hoca_text = s['instructor'] if s['instructor'] else "Hoca girilmedi"
-                amfi_text = s['classroom'] if s['classroom'] else "Amfi belirtilmedi"
+                hoca_text = s['instructor'] if s['instructor'] else "Belirtilmedi"
+                amfi_text = s['classroom'] if s['classroom'] else "Belirtilmedi"
                 
                 text = f"{s['code']}\n{s['start_time']} - {s['end_time']}\n({amfi_text})\n{hoca_text}"
                 
@@ -569,7 +550,6 @@ class TimetableView(QWidget):
         end_in = QLineEdit(slot_data["end_time"])
         room_in = QLineEdit(slot_data["classroom"])
         instructor_in = QLineEdit(slot_data["instructor"])
-        instructor_contact_in = QLineEdit(slot_data.get("instructor_contact", ""))
 
         credit_in = QSpinBox()
         credit_in.setRange(0, 20)
@@ -605,17 +585,19 @@ class TimetableView(QWidget):
         lay.addWidget(btn_save)
 
         def save():
+            room_val = room_in.text().strip() or "Belirtilmedi"
+            inst_val = instructor_in.text().strip() or "Belirtilmedi"
+            
             selected_color = color_box.currentData()
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
                 cur.execute("""
                     UPDATE timetable 
                     SET day_of_week = ?, start_time = ?, end_time = ?,
-                        classroom = ?, instructor = ?, instructor_contact = ?, cell_color = ?
+                        classroom = ?, instructor = ?, cell_color = ?
                     WHERE id = ?
                 """, (day_box.currentData(), start_in.text().strip(), end_in.text().strip(),
-                      room_in.text().strip(), instructor_in.text().strip(), instructor_contact_in.text().strip(), 
-                      selected_color, slot_data["slot_id"]))
+                      room_val, inst_val, selected_color, slot_data["slot_id"]))
                 
                 cur.execute("UPDATE courses SET credit = ? WHERE id = ?", (credit_in.value(), slot_data["course_id"]))
                 conn.commit()
@@ -667,10 +649,9 @@ class TimetableView(QWidget):
 
             if not course: return
 
-            # Eğer takvim hücresinde (slot) özel olarak hoca/sınıf girilmemişse, dersin ana ayarlarından (course) çek.
-            slot_instructor = (slot["instructor"] if slot and slot["instructor"] else None) or course["instructor"] or "Belirtilmemiş"
-            slot_contact = (slot["instructor_contact"] if slot and slot["instructor_contact"] else None) or course["instructor_contact"] or "Belirtilmemiş"
-            slot_classroom = (slot["classroom"] if slot and slot["classroom"] else None) or course["classroom"] or "Belirtilmemiş"
+            course = dict(course)
+            slot_instructor = (slot["instructor"] if slot and slot["instructor"] else None) or course.get("instructor") or "Belirtilmemiş"
+            slot_classroom = (slot["classroom"] if slot and slot["classroom"] else None) or course.get("classroom") or "Belirtilmemiş"
 
             dlg = QDialog(self)
             dlg.setWindowTitle(f"Ders Detayları - {course['code']}")
@@ -685,7 +666,6 @@ class TimetableView(QWidget):
             header_lay = QVBoxLayout(header)
             header_lay.setContentsMargins(14, 12, 14, 12)
 
-            # Sözlük erişimlerini güvenli hale getirdik (.keys() kontrolü ile)
             term_info = f"{course['year']} - {course['term']} Dönemi" if 'year' in course.keys() else ""
             
             code_label = QLabel(f"{course['code']}   |   <span style='color: #a1a1aa; font-weight: 500;'>{term_info}</span>")
@@ -708,8 +688,7 @@ class TimetableView(QWidget):
                 ("Kredi", f"{course['credit'] or 0}"),
                 ("Derslik", slot_classroom),
                 ("Saat", f"{slot['start_time'] if slot and slot['start_time'] else slot_data.get('start_time', '')} - {slot['end_time'] if slot and slot['end_time'] else slot_data.get('end_time', '')}"),
-                ("Hoca", slot_instructor),
-                ("İletişim", slot_contact),
+                ("Hoca", slot_instructor)
             ]
 
             for i, (label, value) in enumerate(rows):
@@ -758,7 +737,6 @@ class TimetableView(QWidget):
 
             def edit_course():
                 dlg.accept()
-                # Arayüz kilitlenmesini engellemek için 0.1 saniye gecikme ile açıyoruz
                 QTimer.singleShot(100, lambda: self.dialog_edit_slot(slot_data))
 
             def copy_course():
@@ -775,8 +753,8 @@ class TimetableView(QWidget):
             dlg.exec()
             
         except Exception as e:
-            import traceback
-            QMessageBox.critical(self, "Arayüz Hatası", f"Detay ekranı açılırken hata oluştu:\n{e}\n\nDetay:\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "Arayüz Hatası", f"Detay ekranı açılırken hata oluştu:\n{e}")
+
     def dialog_copy_course(self, course_id: int):
         try:
             with self.db.get_connection() as conn:
@@ -786,8 +764,6 @@ class TimetableView(QWidget):
                 """, (course_id,)).fetchone()
 
             if not row: return
-            
-            # sqlite3.Row objesini standart Python Sözlüğüne (Dict) çevirerek sessiz hataları önlüyoruz
             course = dict(row)
 
             dlg = QDialog(self)
@@ -813,10 +789,9 @@ class TimetableView(QWidget):
             
             cred_in = QSpinBox()
             cred_in.setRange(0, 20)
-            # Eğer eski veritabanı kayıtlarında kredi boş bırakıldıysa (None/Empty) güvenle 3 olarak ata
             try:
                 credit_val = int(course.get("credit", 3) or 3)
-            except (ValueError, TypeError):
+            except:
                 credit_val = 3
             cred_in.setValue(credit_val)
 
@@ -846,50 +821,35 @@ class TimetableView(QWidget):
 
             def save():
                 new_code = code_in.text().strip()
-                if not new_code:
-                    QMessageBox.warning(dlg, "Uyarı", "Ders kodu boş bırakılamaz.")
-                    return
+                if not new_code: return
                 try:
                     with self.db.get_connection() as conn:
                         cur = conn.cursor()
                         cur.execute("""
                             INSERT INTO courses (code, name, instructor, instructor_contact, classroom, credit, color_hex, year, term)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (new_code, name_in.text().strip(), 
-                              course.get("instructor", ""), 
-                              course.get("instructor_contact", ""), 
-                              course.get("classroom", ""), 
-                              cred_in.value(), 
-                              color_box.currentData(), 
-                              year_box.currentText(), 
-                              term_box.currentText()))
+                        """, (new_code, name_in.text().strip(), course.get("instructor", ""), 
+                              course.get("instructor_contact", ""), course.get("classroom", ""), 
+                              cred_in.value(), color_box.currentData(), year_box.currentText(), term_box.currentText()))
                         conn.commit()
                     
-                    try: 
-                        from core.sound import play_action_sound
-                        play_action_sound("save")
-                    except: 
-                        pass
+                    try: play_action_sound("save")
+                    except: pass
                     
                     dlg.accept()
                     self.filter_year.setCurrentText(year_box.currentText())
                     self.filter_term.setCurrentText(term_box.currentText())
                     self.load_schedule()
-                    from core.events import bus
                     bus.courses_changed.emit()
                     
                 except Exception as e:
-                    import traceback
-                    error_details = traceback.format_exc()
-                    QMessageBox.critical(dlg, "Veritabanı Hatası", f"Ders kopyalanamadı.\n\nHata Özeti:\n{e}\n\nDetay:\n{error_details}")
+                    QMessageBox.critical(dlg, "Veritabanı Hatası", f"Ders kopyalanamadı:\n{e}")
 
             btn_save.clicked.connect(save)
             dlg.exec()
             
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            QMessageBox.critic
+            QMessageBox.critical(self, "Arayüz Hatası", f"Ders kopyalama ekranı açılamadı:\n{e}")
 
     def dialog_add_course(self):
         dlg = QDialog(self)
@@ -930,26 +890,27 @@ class TimetableView(QWidget):
 
         btn_save = QPushButton("Kaydet")
         btn_save.setObjectName("AccentButton")
-        btn_save.setCursor(QCursor(Qt.PointingHandCursor))
         lay.addWidget(btn_save)
 
         def save():
             if not code_in.text().strip(): return
+            inst_val = inst_in.text().strip() or "Belirtilmedi"
+            room_val = room_in.text().strip() or "Belirtilmedi"
+            
             try:
                 with self.db.get_connection() as conn:
                     cur = conn.cursor()
                     cur.execute("""
                         INSERT INTO courses (code, name, instructor, classroom, credit, color_hex, year, term)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (code_in.text().strip(), name_in.text().strip(), inst_in.text().strip(),
-                          room_in.text().strip(), cred_in.value(), color_box.currentData(), 
+                    """, (code_in.text().strip(), name_in.text().strip(), inst_val,
+                          room_val, cred_in.value(), color_box.currentData(), 
                           year_box.currentText(), term_box.currentText()))
                     conn.commit()
                 dlg.accept()
                 self.load_schedule()
                 bus.courses_changed.emit()
-            except Exception as e:
-                pass
+            except: pass
 
         btn_save.clicked.connect(save)
         dlg.exec()
@@ -960,7 +921,6 @@ class TimetableView(QWidget):
         
         with self.db.get_connection() as conn:
             cur = conn.cursor()
-            # YENİ: Yalnızca arayüzdeki filtrede seçili olan dönemin dersleri gösterilir!
             cur.execute("SELECT id, code, name FROM courses WHERE year = ? AND term = ? ORDER BY code ASC", (sel_year, sel_term))
             courses = cur.fetchall()
 
@@ -993,12 +953,13 @@ class TimetableView(QWidget):
         lay.addWidget(btn_save)
 
         def save():
+            room_val = room_in.text().strip() or "Belirtilmedi"
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
                 cur.execute("""
                     INSERT INTO timetable (course_id, day_of_week, start_time, end_time, classroom)
                     VALUES (?, ?, ?, ?, ?)
-                """, (c_box.currentData(), day_box.currentData(), start_in.text().strip(), end_in.text().strip(), room_in.text().strip()))
+                """, (c_box.currentData(), day_box.currentData(), start_in.text().strip(), end_in.text().strip(), room_val))
                 conn.commit()
             dlg.accept()
             self.load_schedule()
@@ -1146,13 +1107,10 @@ class TimetableView(QWidget):
             data = dict(r)
             yt_key = f"{data['year'] or self.default_year} - {data['term'] or 'Güz'}"
             c_code = data["code"]
-            
             if yt_key not in grouped_assessments: grouped_assessments[yt_key] = []
             grouped_assessments[yt_key].append(data)
 
-        # Dönemlere göre başlıkları oluştur (Yanına Dönem Ortalamasını Yaz)
         for yt_key, items in grouped_assessments.items():
-            # O döneme ait ortalamayı hesapla
             term_points, term_credits = calc_gpa_from_rows(items)
             term_gpa = term_points / term_credits if term_credits > 0 else 0.0
             term_gpa_str = f" | Dönem Ortalaması (SPA): {term_gpa:.2f}" if term_credits > 0 else " | Henüz Not Girilmedi"
@@ -1161,12 +1119,10 @@ class TimetableView(QWidget):
             lbl_yt.setStyleSheet("font-size: 16px; font-weight: 900; color: #f59e0b; margin-top: 16px; border-bottom: 2px solid #f59e0b; padding-bottom: 4px;")
             self.assessments_lay.insertWidget(self.assessments_lay.count() - 1, lbl_yt)
             
-            # Dersleri kendi içinde tekrar grupla
             course_grouped = {}
             for data in items:
                 c_code = data["code"]
-                if c_code not in course_grouped:
-                    course_grouped[c_code] = []
+                if c_code not in course_grouped: course_grouped[c_code] = []
                 course_grouped[c_code].append(data)
 
             for c_code, c_items in course_grouped.items():
@@ -1191,6 +1147,7 @@ class TimetableView(QWidget):
         
         self.lbl_gpa.setText(f"Seçili Dönem Ort. (SPA): {d_gpa_text}  |  Genel Ort. (CGPA): {g_gpa_text}")
         self.lbl_letter.setText(f"Kredi (Dönem/Genel): {donem_credits:.1f} / {genel_credits:.1f}")
+
     def update_score(self, assessment_id: int, score: float):
         with self.db.get_connection() as conn:
             cur = conn.cursor()
@@ -1223,8 +1180,7 @@ class TimetableView(QWidget):
         lay = QVBoxLayout(dlg)
 
         c_box = QComboBox()
-        for c in courses:
-            c_box.addItem(f"[{c['term']}] {c['code']}", c["id"])
+        for c in courses: c_box.addItem(f"[{c['term']}] {c['code']}", c["id"])
 
         title_in = QLineEdit()
         title_in.setPlaceholderText("Başlık (Örn: Ara Sınav, Proje-1)")
@@ -1283,7 +1239,6 @@ class TimetableView(QWidget):
         top_bar.addWidget(btn_save)
         lay.addLayout(top_bar)
 
-        # STANDART QTableWidget YERİNE ÖZEL SINIFIMIZI KULLANIYORUZ
         self.plan_table = PersonalPlanTableWidget(24, 7)
         self.plan_table.setItemDelegate(PersonalPlanDelegate(self.plan_table))
         self.plan_table.setHorizontalHeaderLabels(DAYS_TR)
@@ -1295,14 +1250,11 @@ class TimetableView(QWidget):
         self.plan_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.plan_table.horizontalHeader().setStretchLastSection(True)
         self.plan_table.horizontalHeader().setDefaultSectionSize(120)
-        
         self.plan_table.verticalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.plan_table.verticalHeader().setDefaultSectionSize(55)
-        
         self.plan_table.setSelectionMode(QTableWidget.SingleSelection)
         self.plan_table.setSelectionBehavior(QTableWidget.SelectItems)
         
-        # SAĞ TIK MENÜSÜ BAĞLANTISI
         self.plan_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.plan_table.customContextMenuRequested.connect(self.show_plan_context_menu)
         
@@ -1339,6 +1291,7 @@ class TimetableView(QWidget):
                 QApplication.clipboard().setText(item.text())
             elif action == action_paste:
                 item.setText(QApplication.clipboard().text())
+
     def load_personal_plan(self):
         for r in range(24):
             for c in range(7):
