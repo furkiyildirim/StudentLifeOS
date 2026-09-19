@@ -45,6 +45,7 @@ Student Life OS, universite ogrencilerinin akademik ve gunluk planlarini yerel v
 ## Uygulama Goruntuleri
 
 Uygulamanin ekran goruntuleri `images/` klasorunden:
+![Kontrol Paneli](images/guide.png)
 
 ![Kontrol Paneli](images/dashboard.png)
 
