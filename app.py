@@ -8,7 +8,7 @@ import json
 from datetime import datetime, date, timedelta
 
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
+    QApplication, QDialog, QGraphicsDropShadowEffect, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
     QPushButton, QLabel, QStackedWidget, QFrame, QCheckBox,
     QSystemTrayIcon, QMenu, QStyle, QProgressBar, QGraphicsOpacityEffect,
     QSizePolicy, QComboBox, QScrollArea, QListWidget, QListWidgetItem,
@@ -138,6 +138,170 @@ QMenu::item { padding: 8px 24px; border-radius: 5px; }
 QMenu::item:selected { background-color: #3f3f46; color: #ffffff; }
 QComboBox QAbstractItemView { background-color: #18181b; color: #f4f4f5; border: 1px solid #52525b; selection-background-color: #3f3f46; selection-color: #ffffff; padding: 4px; outline: none; }
 """
+
+class WelcomeDialog(QDialog):
+    def __init__(self, main_window):
+        super().__init__(main_window)
+        self.main_window = main_window
+        
+        # Arka planı şeffaf ve çerçevesiz yapıyoruz
+        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(0, 0, 0, 0)
+        
+        # Arka Planı Karartan (Dim) Yarı Saydam Katman
+        self.overlay_frame = QFrame(self)
+        self.overlay_frame.setStyleSheet("background-color: rgba(9, 9, 11, 210);")
+        overlay_lay = QVBoxLayout(self.overlay_frame)
+        overlay_lay.setAlignment(Qt.AlignCenter)
+        
+        # Ortadaki Asıl Tanıtım Kartı (Gölge efekti kaldırıldı)
+        self.card = QFrame()
+        self.card.setFixedSize(620, 560)
+        self.card.setObjectName("WelcomeCard")
+        self.card.setStyleSheet("""
+            QFrame#WelcomeCard {
+                background-color: #171412; 
+                border: 1px solid #38bdf8; 
+                border-radius: 16px;
+            }
+            QLabel { border: none; background: transparent; }
+        """)
+        
+        card_lay = QVBoxLayout(self.card)
+        card_lay.setContentsMargins(30, 30, 30, 30)
+        card_lay.setSpacing(16)
+        
+        # Başlık ve Açıklama
+        title = QLabel("🎓 Student Life OS Tanıtım Rehberi")
+        title.setStyleSheet("font-size: 24px; font-weight: 800; color: #38bdf8;")
+        title.setAlignment(Qt.AlignCenter)
+        card_lay.addWidget(title)
+
+        desc = QLabel("Uygulamadaki tüm modüllerin ne işe yaradığını aşağıdan inceleyebilirsiniz:")
+        desc.setStyleSheet("color: #a1a1aa; font-size: 13px;")
+        desc.setAlignment(Qt.AlignCenter)
+        card_lay.addWidget(desc)
+        
+        # Kaydırılabilir İçerik Alanı
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("""
+            QScrollArea { border: 1px solid #292524; background: #12100e; border-radius: 10px; }
+            QScrollBar:vertical { background: #171412; width: 10px; border-radius: 5px; }
+            QScrollBar::handle:vertical { background: #3f3f46; border-radius: 5px; }
+            QScrollBar::handle:vertical:hover { background: #38bdf8; }
+        """)
+        
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        content_lay = QVBoxLayout(content)
+        content_lay.setContentsMargins(12, 12, 12, 12)
+        content_lay.setSpacing(12)
+
+        features = [
+            ("📊 Kontrol Paneli", "Günlük özetinizi, hava durumunu, çalışma saatlerinizi ve yaklaşan tüm görev/sınavları tek bir ekrandan takip edin."),
+            ("📋 Yapılacaklar (To-Do)", "Günlük görevlerinizi önceliklendirerek yönetin. Görevler eklendikçe ilerleme çubuğunuz dolsun."),
+            ("📅 Akıllı Takvim", "Sınavlarınızı ve kişisel planlarınızı takvim üzerinde görün. Tamamlanan görevlerin üzerini anında çizin."),
+            ("📚 Dersler & Notlar", "Haftalık ders programınızı oluşturun. Sınav notlarınızı girerek dönem (SPA) ve genel ortalamanızı (CGPA) hesaplayın."),
+            ("📂 Materyal Havuzu", "PDF, Word ve PowerPoint dosyalarınızı okuyun. Zengin metin editörüyle ders notları tutun."),
+            ("🏋️ Spor & Alışkanlık", "Haftalık antrenman programınızı yapın ve 'Zinciri Kırma' mantığıyla günlük alışkanlıklarınızı takip edin."),
+            ("🎵 Müzik & Odak", "YouTube Music oynatıcısı ile müzik dinleyin ve Pomodoro sayacı ile odaklanarak çalışın."),
+            ("🏫 Üniversite", "Üniversitenizin OBS (Öğrenci Bilgi Sistemi) ve e-posta hesaplarına güvenli tarayıcı üzerinden hızlıca erişin."),
+            ("🚀 Projeler", "Uzun soluklu projelerinizi aşamalara bölün, ilerlemeyi çubuktan takip edin ve defter tutun."),
+            ("⚙️ Ayarlar", "Bildirim seslerini, hava durumu konumunu, AI API anahtarlarını ayarlayın. Gerektiğinde sistemi sıfırlayın."),
+            ("✨ Yapay Zeka Asistanı", "Sağ alt köşedeki yüzer buton ile asistanınıza ulaşın. Derslerinizi, notlarınızı ve programınızı ona sorun!")
+        ]
+
+        for icon_title, description in features:
+            item_frame = QFrame()
+            # Hover efekti kaldırıldı, sadece sade bir çerçeve bırakıldı
+            item_frame.setStyleSheet("background-color: #1c1917; border: 1px solid #3f3f46; border-radius: 8px;")
+            item_lay = QVBoxLayout(item_frame)
+            item_lay.setContentsMargins(14, 12, 14, 12)
+            item_lay.setSpacing(4)
+            
+            lbl_t = QLabel(icon_title)
+            lbl_t.setStyleSheet("font-size: 14px; font-weight: bold; color: #7dd3fc;")
+            
+            lbl_d = QLabel(description)
+            lbl_d.setStyleSheet("font-size: 12px; color: #d4d4d8;")
+            lbl_d.setWordWrap(True)
+            
+            item_lay.addWidget(lbl_t)
+            item_lay.addWidget(lbl_d)
+            content_lay.addWidget(item_frame)
+
+        scroll.setWidget(content)
+        card_lay.addWidget(scroll)
+        
+        # Alt Kontroller
+        bottom_lay = QHBoxLayout()
+        
+        self.chk_show_again = QCheckBox("Her açılışta göster")
+        self.chk_show_again.setCursor(Qt.PointingHandCursor)
+        self.chk_show_again.setStyleSheet("color: #e4e4e7; font-weight: bold; font-size: 13px;")
+        
+        show_setting = self.get_db_setting('show_welcome_on_startup', '1')
+        self.chk_show_again.setChecked(show_setting == '1')
+        self.chk_show_again.toggled.connect(self.toggle_startup_setting)
+        
+        btn_close = QPushButton("🚀 Uygulamaya Devam Et")
+        btn_close.setCursor(Qt.PointingHandCursor)
+        # Ekstra basılma (pressed) efektleri de kaldırılarak standart görünüme getirildi
+        btn_close.setStyleSheet("""
+            QPushButton { background-color: #3b82f6; color: white; border-radius: 8px; padding: 12px 20px; font-size: 14px; font-weight: bold; border: none; }
+            QPushButton:hover { background-color: #2563eb; }
+        """)
+        btn_close.clicked.connect(self.accept)
+        
+        bottom_lay.addWidget(self.chk_show_again)
+        bottom_lay.addStretch()
+        bottom_lay.addWidget(btn_close)
+        
+        card_lay.addLayout(bottom_lay)
+        
+        # Kartı yarı saydam arkaya, yarı saydam arkayı da ana düzene ekliyoruz
+        overlay_lay.addWidget(self.card)
+        main_lay.addWidget(self.overlay_frame)
+
+    # Diyalog ekrana çıkarken ana pencerenin tam boyutlarını alıp üzerine yapışır
+    def showEvent(self, event):
+        if self.parent():
+            self.setGeometry(self.parent().geometry())
+        super().showEvent(event)
+
+    def get_db_setting(self, key, default='1'):
+        try:
+            with self.main_window.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = ?", (key,))
+                row = cur.fetchone()
+                return row[0] if row else default
+        except:
+            return default
+
+    def toggle_startup_setting(self, checked):
+        val = '1' if checked else '0'
+        try:
+            with self.main_window.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT 1 FROM app_settings WHERE setting_key = 'show_welcome_on_startup'")
+                if cur.fetchone():
+                    cur.execute("UPDATE app_settings SET setting_value = ? WHERE setting_key = 'show_welcome_on_startup'", (val,))
+                else:
+                    cur.execute("INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)", ('show_welcome_on_startup', val))
+                conn.commit()
+                
+            if hasattr(self.main_window, 'settings_view'):
+                if hasattr(self.main_window.settings_view, 'chk_welcome'):
+                    self.main_window.settings_view.chk_welcome.blockSignals(True)
+                    self.main_window.settings_view.chk_welcome.setChecked(checked)
+                    self.main_window.settings_view.chk_welcome.blockSignals(False)
+        except:
+            pass
 
 class NotificationPopup(QWidget):
     def __init__(self, main_window):
@@ -506,6 +670,7 @@ class SettingsView(QWidget):
         a_lay.addWidget(btn_save_api)
         
         lay.addWidget(ai_card)
+        
 
         notif_card = QFrame()
         notif_card.setObjectName("Card")
@@ -515,6 +680,12 @@ class SettingsView(QWidget):
         lbl_notif_title = QLabel("🔔 Bildirim ve Ses Tercihleri")
         lbl_notif_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #38bdf8; margin-bottom: 4px;")
         n_lay.addWidget(lbl_notif_title)
+
+        self.chk_welcome = QCheckBox("Uygulama açılışında Tanıtım Ekranını göster")
+        self.chk_welcome.setStyleSheet("font-size: 13px; font-weight: bold; color: #e4e4e7; margin-bottom: 8px;")
+        self.chk_welcome.setChecked(self.get_db_setting('show_welcome_on_startup', '1') == '1')
+        self.chk_welcome.toggled.connect(lambda checked: self.set_db_setting('show_welcome_on_startup', '1' if checked else '0'))
+        n_lay.addWidget(self.chk_welcome)
 
         self.btn_notif = QPushButton()
         self.btn_notif.setCheckable(True)
@@ -935,6 +1106,15 @@ class MainWindow(QMainWindow):
         self.setup_event_listeners()
         self.setup_background_timer()
 
+        # --- ARKA PLANDAN UYANMA SİNYALİ DİNLEYİCİSİ ---
+        self.wakeup_file = os.path.join(tempfile.gettempdir(), "student_os_wakeup.txt")
+        if os.path.exists(self.wakeup_file):
+            try: os.remove(self.wakeup_file)
+            except: pass
+            
+        self.wakeup_timer = QTimer(self)
+        self.wakeup_timer.timeout.connect(self.check_wakeup)
+        self.wakeup_timer.start(500) # Saniyede 2 kez uyanma komutu var mı diye kontrol eder
     def style_open_menus(self):
         """Açılır seçimleri bulundukları ekranın vurgu rengiyle stillendir."""
         menu_colors = {
@@ -1032,6 +1212,7 @@ class MainWindow(QMainWindow):
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('weather_enabled', '1')")
             cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('weather_city', 'İstanbul')")
             cur.execute("UPDATE app_settings SET setting_value = 'İstanbul' WHERE setting_key = 'weather_city' AND setting_value IN ('1', '', 'Otomatik Konum')")
+            cur.execute("INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES ('show_welcome_on_startup', '1')")
             conn.commit()
 
     def setup_system_tray(self):
@@ -1061,9 +1242,16 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+        self.check_welcome_screen()
         if not hasattr(self, '_welcome_shown'):
             self._welcome_shown = True
 
+            QTimer.singleShot(1500, lambda: self.send_tray_notification(
+                "Sistem Aktif 🚀", 
+                "Öğrenci Asistanı başarıyla başlatıldı. Verimli bir gün dileriz!", 
+                color="#38bdf8"
+            ))
+            
             now = datetime.now()
             today_iso = now.date().isoformat()
 
@@ -1090,6 +1278,17 @@ class MainWindow(QMainWindow):
                 color = "#38bdf8"
 
             QTimer.singleShot(10000, lambda: self.send_tray_notification(title, msg, color=color, sound_key="sound_plans"))
+
+    def check_wakeup(self):
+            # Eğer 2. uygulama bir uyanma dosyası oluşturduysa onu algıla
+            if os.path.exists(self.wakeup_file):
+                try:
+                    os.remove(self.wakeup_file) # Sinyali temizle
+                except OSError:
+                    pass
+                
+                # Uygulamayı Qt'nin güvenli yöntemiyle TAM EKRAN olarak öne getir
+                self.show_and_activate()
 
     def on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.DoubleClick:
@@ -1265,6 +1464,9 @@ class MainWindow(QMainWindow):
                 self.lbl_network_status.setText("🔴 Offline")
                 self.lbl_network_status.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 12px; padding-right: 12px;")
                 self.send_tray_notification("Bağlantı Koptu 🔴", "Şu anda çevrimdışı çalışıyorsunuz. Web modülleri kısıtlandı.", color="#ef4444")
+    def show_welcome_dialog(self):
+            dlg = WelcomeDialog(self)
+            dlg.exec()
     def init_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
@@ -1341,8 +1543,15 @@ class MainWindow(QMainWindow):
         sb_lay.addWidget(self.status_lbl)
         sb_lay.addSpacing(10)
 
+        
+
         action_btn_lay = QVBoxLayout() # Yatay dizilimi dikey olarak değiştirdik
         action_btn_lay.setSpacing(6)
+
+        self.btn_tour = QPushButton("💡 Tanıtım")
+        self.btn_tour.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_tour.setStyleSheet("background-color: #27272a; color: #facc15; border-radius: 6px; padding: 8px; font-weight: bold; border: 1px solid #3f3f46;")
+        self.btn_tour.clicked.connect(self.show_welcome_dialog)
 
         self.btn_hide = QPushButton("🔽 Arka Plan")
         self.btn_hide.setCursor(QCursor(Qt.PointingHandCursor))
@@ -1354,6 +1563,7 @@ class MainWindow(QMainWindow):
         self.btn_quit.setStyleSheet("background-color: #9f1239; color: #ffffff; border-radius: 6px; padding: 8px; font-weight: bold; border: 1px solid #e11d48;")
         self.btn_quit.clicked.connect(QApplication.quit)
 
+        action_btn_lay.addWidget(self.btn_tour)
         action_btn_lay.addWidget(self.btn_hide)
         action_btn_lay.addWidget(self.btn_quit)
         sb_lay.addLayout(action_btn_lay)
@@ -1464,6 +1674,12 @@ class MainWindow(QMainWindow):
 
         if self.is_sidebar_expanded:
             self.status_lbl.hide()
+
+            # --- DARALTMA DURUMU ---
+            self.btn_tour.setProperty("full_text", self.btn_tour.text())
+            self.btn_tour.setText("💡")
+            self.btn_tour.setToolTip("Tanıtımı Göster")
+            self.btn_tour.setStyleSheet("text-align: center; padding: 8px 0px; background-color: #27272a; border-radius: 6px;")
             
             self.btn_hide.setProperty("full_text", self.btn_hide.text())
             self.btn_hide.setText("🔽")
@@ -1496,7 +1712,11 @@ class MainWindow(QMainWindow):
             if full_quit: 
                 self.btn_quit.setText(full_quit)
                 self.btn_quit.setStyleSheet("background-color: #9f1239; color: #ffffff; border-radius: 6px; padding: 8px; font-weight: bold; border: 1px solid #e11d48;")
-            
+            # --- GENİŞLETME DURUMU ---
+            full_tour = self.btn_tour.property("full_text")
+            if full_tour: 
+                self.btn_tour.setText(full_tour)
+                self.btn_tour.setStyleSheet("background-color: #27272a; color: #facc15; border-radius: 6px; padding: 8px; font-weight: bold; border: 1px solid #3f3f46;")
             self.is_sidebar_expanded = True
 
         self.sidebar_anim = QVariantAnimation(self)
@@ -1598,11 +1818,26 @@ class MainWindow(QMainWindow):
         self.btn_back.setEnabled(self.history_index > 0)
         self.btn_forward.setEnabled(self.history_index < len(self.history) - 1)
 
-    
+    def check_welcome_screen(self):
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'show_welcome_on_startup'")
+            row = cur.fetchone()
+            
+            # Eğer değer 1 ise (veya kayıtlı değilse) tanıtımı göster
+            if not row or row[0] == "1":
+                dlg = WelcomeDialog(self)
+                dlg.exec()
 
 if __name__ == "__main__":
     if not ensure_single_instance():
-        print("Student Life OS already running.")
+        # Eğer uygulama zaten açıksa (arka plandaysa), uyanma sinyali oluştur ve sessizce kapan
+        wakeup_file = os.path.join(tempfile.gettempdir(), "student_os_wakeup.txt")
+        try:
+            with open(wakeup_file, "w") as f:
+                f.write("wake")
+        except Exception:
+            pass
         sys.exit(0)
 
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
@@ -1612,6 +1847,17 @@ if __name__ == "__main__":
         try:
             myappid = 'student.life.os.1.0'
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+            
+            # Siyah üst pencere çerçevesi (Koyu Tema)
+            hwnd = ctypes.windll.user32.FindWindowW(None, "Student Life OS")
+            if hwnd:
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    ctypes.byref(ctypes.c_int(2)),
+                    ctypes.sizeof(ctypes.c_int)
+                )
         except Exception:
             pass
 
