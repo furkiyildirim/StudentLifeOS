@@ -31,6 +31,7 @@ from views.fitness_view import FitnessView
 from views.music_view import MusicView
 from views.university_view import UniversityView
 from views.ai_floating_chat import AIChatWindow
+from views.library_view import LibraryView
 
 try:
     from views.project_view import ProjectView
@@ -212,7 +213,8 @@ class WelcomeDialog(QDialog):
             ("🏫 Üniversite", "Üniversitenizin OBS (Öğrenci Bilgi Sistemi) ve e-posta hesaplarına güvenli tarayıcı üzerinden hızlıca erişin."),
             ("🚀 Projeler", "Uzun soluklu projelerinizi aşamalara bölün, ilerlemeyi çubuktan takip edin ve defter tutun."),
             ("⚙️ Ayarlar", "Bildirim seslerini, hava durumu konumunu, AI API anahtarlarını ayarlayın. Gerektiğinde sistemi sıfırlayın."),
-            ("✨ Yapay Zeka Asistanı", "Sağ alt köşedeki yüzer buton ile asistanınıza ulaşın. Derslerinizi, notlarınızı ve programınızı ona sorun!")
+            ("✨ Yapay Zeka Asistanı", "Sağ alt köşedeki yüzer buton ile asistanınıza ulaşın. Derslerinizi, notlarınızı ve programınızı ona sorun!"),
+            ("📖 Kitaplığım", "Okuduğunuz, okuyacağınız ve şu an okumakta olduğunuz kitapları takip edin, PDF e-kitaplarınızı tek tıkla açın.")
         ]
 
         for icon_title, description in features:
@@ -991,68 +993,119 @@ class SettingsView(QWidget):
                     shutil.rmtree(os.path.join(profiles_dir, entry), ignore_errors=True)
 
     def perform_factory_reset(self):
-        reply = QMessageBox.warning(
-            self, "DİKKAT",
-            "Tüm görevler, dersler, planlar, projeler, notlar, ayarlar, sohbet geçmişi ve yerel müzik kayıtları silinecek. Bu işlem geri alınamaz. Emin misiniz?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        from PySide6.QtWidgets import QMessageBox, QInputDialog
+        import shutil
+        import os
+        from PySide6.QtCore import QUrl
+        
+        # --- 1. AŞAMA: YAZILI ONAY (GÜVENLİK KONTROLÜ) ---
+        text, ok = QInputDialog.getText(
+            self, 
+            "⚠️ SİSTEM SIFIRLAMA ONAYI", 
+            "Tüm verileriniz (dersler, notlar, projeler, kitaplar, materyaller ve ayarlar) kalıcı olarak silinecek.\nBu işlem GERİ ALINAMAZ!\n\n"
+            "İşlemi onaylamak için aşağıdaki kutuya büyük harflerle 'SİL' yazın:"
         )
-        if reply != QMessageBox.Yes:
+        
+        # Eğer kullanıcı "SİL" yazmadıysa veya İptal'e bastıysa işlemi durdur
+        if not ok or text.strip() != "SİL":
+            if ok: # Kullanıcı giriş yaptı ama kelimeyi yanlış yazdıysa
+                QMessageBox.warning(self, "İptal Edildi", "Onay metni hatalı girildi. Sistem sıfırlama işlemi durduruldu.")
             return
 
-        with self.main_window.db.get_connection() as conn:
-            cur = conn.cursor()
-            tables = [
-                row[0] for row in cur.execute("""
-                    SELECT name FROM sqlite_master
-                    WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                """).fetchall()
-            ]
-            cur.execute("PRAGMA foreign_keys = OFF")
-            for table in tables:
-                cur.execute(f'DELETE FROM "{table.replace(chr(34), chr(34) * 2)}"')
-            cur.execute("PRAGMA foreign_keys = ON")
-            conn.commit()
+        # --- 2. AŞAMA: SİLME İŞLEMLERİ ---
+        tables_to_clear = [
+            "todo_tasks", "calendar_events", "calendar_completions", 
+            "timetable", "courses", "assessments", "notes", 
+            "materials", "habits", "habit_logs", "workout_exercises",
+            "projects", "project_tasks", "books"
+        ]
+        
+        try:
+            # 1. Veritabanı Temizliği
+            with self.main_window.db.get_connection() as conn:
+                cur = conn.cursor()
+                for table in tables_to_clear:
+                    try:
+                        cur.execute(f"DELETE FROM {table}")
+                    except: pass
+                conn.commit()
+            
+            # 2. TÜM WEB TARAYICI OTURUMLARINI KAPAT (Derin Temizlik)
+            def force_logout_webview(webview, profile):
+                if webview and profile:
+                    profile.cookieStore().deleteAllCookies()
+                    profile.clearHttpCache()
+                    webview.page().runJavaScript("window.localStorage.clear(); window.sessionStorage.clear();")
+                    webview.setUrl(QUrl(webview.url().toString()))
 
-        self.logout_web_profiles()
+            try:
+                if hasattr(self.main_window, 'yt_profile'):
+                    force_logout_webview(self.main_window.yt_webview, self.main_window.yt_profile)
+                
+                if hasattr(self.main_window, 'vault_view') and hasattr(self.main_window.vault_view, 'drive_profile'):
+                    force_logout_webview(self.main_window.vault_view.drive_webview, self.main_window.vault_view.drive_profile)
+                    
+                if hasattr(self.main_window, 'university_view'):
+                    if hasattr(self.main_window.university_view, 'obs_profile'):
+                        force_logout_webview(self.main_window.university_view.obs_webview, self.main_window.university_view.obs_profile)
+                    if hasattr(self.main_window.university_view, 'mail_profile'):
+                        force_logout_webview(self.main_window.university_view.mail_webview, self.main_window.university_view.mail_profile)
+            except Exception as e:
+                print(f"Oturumlar kapatılırken hata: {e}")
 
-        for media_dir in ("resources/musics", "resources/covers"):
-            if os.path.isdir(media_dir):
-                for entry in os.listdir(media_dir):
-                    path = os.path.join(media_dir, entry)
-                    if os.path.isfile(path):
+            # 3. Fiziksel Dosyaları Temizle (vault_storage VE covers)
+            for directory in ["vault_storage", os.path.join("resources", "covers")]:
+                if os.path.exists(directory):
+                    for filename in os.listdir(directory):
+                        file_path = os.path.join(directory, filename)
                         try:
-                            os.remove(path)
-                        except OSError:
-                            pass
+                            if os.path.isfile(file_path) or os.path.islink(file_path):
+                                os.unlink(file_path)
+                            elif os.path.isdir(file_path):
+                                shutil.rmtree(file_path)
+                        except Exception: pass
+                        
+            # 4. Arayüzü ve Bildirimleri Sıfırla
+            self.main_window.notification_log.clear()
+            self.main_window.btn_notif_history.setText("🔔 Bildirimler (0)")
 
-        self.main_window.setup_database_settings()
-        project_view = getattr(self.main_window, "project_view", None)
-        if project_view:
-            project_view.active_project_id = None
-            project_view.active_task_id = None
-            project_view.load_projects()
-            project_view.project_list.clear()
-            project_view.task_list.clear()
-            project_view.title_edit.clear()
-            project_view.notes_edit.clear()
-            project_view.enable_right_panel(False)
-        todo_view = getattr(self.main_window, "todo_view", None)
-        if todo_view:
-            todo_view.load_tasks()
-        music_view = getattr(self.main_window, "music_view", None)
-        if music_view:
-            music_view.player.stop()
-            music_view.load_playlists()
-        bus.courses_changed.emit()
-        bus.assessments_changed.emit()
-        bus.habits_changed.emit()
-        bus.workouts_changed.emit()
-        bus.calendar_changed.emit()
-        bus.notes_changed.emit()
-        bus.todo_changed.emit()
-        bus.projects_changed.emit()
-        bus.ai_settings_changed.emit()
-        QMessageBox.information(self, "Başarılı", "Sistem sıfırlandı. Tüm hesaplardan çıkış yapıldı.")
+            try:
+                from core.sound import play_action_sound
+                play_action_sound("delete")
+            except: pass
+
+            from core.events import bus
+            bus.habits_changed.emit()
+            bus.workouts_changed.emit()
+            bus.courses_changed.emit()
+            bus.assessments_changed.emit()
+            bus.notes_changed.emit()
+            bus.calendar_changed.emit()
+            
+            # 5. Tüm Ekranları Yenile
+            if hasattr(self.main_window, 'todo_view'):
+                self.main_window.todo_view.load_tasks()
+            if hasattr(self.main_window, 'fitness_view'):
+                self.main_window.fitness_view.load_habits()
+                self.main_window.fitness_view.load_workouts_for_day()
+            if hasattr(self.main_window, 'timetable_view'):
+                self.main_window.timetable_view.load_schedule()
+                self.main_window.timetable_view.load_assessments()
+            if hasattr(self.main_window, 'vault_view'):
+                self.main_window.vault_view.load_notes()
+                self.main_window.vault_view.load_materials()
+            if hasattr(self.main_window, 'calendar_view'):
+                self.main_window.calendar_view.refresh_calendar()
+            if hasattr(self.main_window, 'project_view'):
+                self.main_window.project_view.new_project()
+                self.main_window.project_view.enable_right_panel(False)
+                self.main_window.project_view.load_projects()
+            if hasattr(self.main_window, 'library_view'):
+                self.main_window.library_view.load_books()
+                
+            QMessageBox.information(self, "Başarılı", "Sistem başarıyla sıfırlandı. Tüm hesaplardan güvenli bir şekilde çıkış yapıldı.")
+        except Exception as e:
+            QMessageBox.critical(self, "Hata", f"Sıfırlama sırasında bir hata oluştu:\n{e}")
 
 class MainWindow(QMainWindow):
     def __init__(self, start_hidden=False):
@@ -1358,47 +1411,88 @@ class MainWindow(QMainWindow):
         self.notif_timer.start(60000)
         self.check_upcoming_events()
 
-    def check_upcoming_events(self):    
+    def check_upcoming_events(self):
         now = datetime.now()
-        
+
+        # İlk 15 saniye boyunca arka plandan gelen hiçbir bildirime izin verme
+        if not hasattr(self, 'app_started_time'):
+            self.app_started_time = now
+            
         if (now - self.app_started_time).total_seconds() < 15:
             return
+
+        # Gece 23:00 ile Sabah 06:00 arasında rahatsız etme modu (sessiz saatler)
         if now.hour >= 23 or now.hour < 6:
             return
 
         today_iso = now.date().isoformat()
+        today_date = now.date()
         today_dow = now.weekday()
-        
-        if 6 <= now.hour < 16:
-            morning_id = f"morning_{today_iso}"
-            if morning_id not in self.notified_events:
-                with self.db.get_connection() as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT COUNT(*) FROM todo_tasks WHERE is_completed = 0")
-                    todo_count = cur.fetchone()[0]
-                    cur.execute("SELECT COUNT(*) FROM calendar_events WHERE event_date = ? AND is_completed = 0", (today_iso,))
-                    plan_count = cur.fetchone()[0]
-                    
-                if todo_count > 0 or plan_count > 0:
-                    self.send_tray_notification("Güne Başlarken ☀️", f"Bugün yapman gereken {todo_count} görev ve {plan_count} plan seni bekliyor. Listeni kontrol etmeyi unutma!", color="#10b981", sound_key="sound_plans")
-                self.notified_events.add(morning_id)
-
-        elif 16 <= now.hour < 23:
-            eod_id = f"eod_{today_iso}"
-            if eod_id not in self.notified_events:
-                with self.db.get_connection() as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT COUNT(*) FROM todo_tasks WHERE is_completed = 0")
-                    todo_count = cur.fetchone()[0]
-                    cur.execute("SELECT COUNT(*) FROM calendar_events WHERE event_date = ? AND is_completed = 0", (today_iso,))
-                    plan_count = cur.fetchone()[0]
-                    
-                if todo_count > 0 or plan_count > 0:
-                    self.send_tray_notification("Gün Sonu Özeti 🌙", f"Bugün tamamlanmamış {todo_count} görevin ve {plan_count} planın var. Göz atmak ister misin?", color="#f59e0b", sound_key="sound_plans")
-                self.notified_events.add(eod_id)
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
+
+            # --- YENİ: DÖNEM BAŞLANGICI BİLDİRİMİ (Günde 1 Kez) ---
+            sem_id = f"semester_start_{today_iso}"
+            if sem_id not in self.notified_events:
+                try:
+                    cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'semester_start_date'")
+                    row = cur.fetchone()
+                    if row and row[0] and row[0] != "0001-01-01":
+                        s_date = datetime.strptime(row[0], "%Y-%m-%d").date()
+                        rem_days = (s_date - today_date).days
+                        
+                        if rem_days == 0:
+                            self.send_tray_notification("Yeni Dönem Başlıyor! 🎓", "Akademik dönem bugün resmen başladı. Harika bir dönem dileriz!", color="#38bdf8")
+                        elif rem_days in [1, 3]:
+                            self.send_tray_notification("Dönem Yaklaşıyor ⏳", f"Yeni dönemin başlamasına son {rem_days} gün kaldı. Hazırlıklarını gözden geçir!", color="#f59e0b")
+                except Exception: pass
+                self.notified_events.add(sem_id)
+
+            # --- YENİ: ÖDÜNÇ KİTAP İADE BİLDİRİMİ (Günde 1 Kez) ---
+            books_id = f"books_return_{today_iso}"
+            if books_id not in self.notified_events:
+                try:
+                    cur.execute("SELECT id, title, return_date, return_location FROM books WHERE is_borrowed = 1")
+                    for b in cur.fetchall():
+                        if not b["return_date"]: continue
+                        r_date = datetime.strptime(b["return_date"], "%d.%m.%Y").date()
+                        rem_days = (r_date - today_date).days
+                        
+                        if rem_days == 0:
+                            self.send_tray_notification("Kitap İade Günü! 📚", f"'{b['title']}' adlı kitabı BUGÜN teslim etmelisin!\n📍 Konum: {b['return_location']}", color="#ef4444")
+                        elif rem_days == 2:
+                            self.send_tray_notification("Kitap İadesi Yaklaşıyor ⏳", f"'{b['title']}' kitabını iade etmene son 2 gün kaldı.\n📍 Konum: {b['return_location']}", color="#f59e0b")
+                except Exception: pass
+                self.notified_events.add(books_id)
+
+            # --- GÜN İÇİ TO-DO ÖZETLERİ (06:00 ile 16:00 Arası) ---
+            if 6 <= now.hour < 16:
+                morning_id = f"morning_{today_iso}"
+                if morning_id not in self.notified_events:
+                    cur.execute("SELECT COUNT(*) FROM todo_tasks WHERE is_completed = 0")
+                    todo_count = cur.fetchone()[0]
+                    cur.execute("SELECT COUNT(*) FROM calendar_events WHERE event_date = ? AND is_completed = 0", (today_iso,))
+                    plan_count = cur.fetchone()[0]
+                        
+                    if todo_count > 0 or plan_count > 0:
+                        self.send_tray_notification("Güne Başlarken ☀️", f"Bugün yapman gereken {todo_count} görev ve {plan_count} plan seni bekliyor. Listeni kontrol etmeyi unutma!", color="#10b981", sound_key="sound_plans")
+                    self.notified_events.add(morning_id)
+
+            # --- AKŞAM ÖZETİ (16:00 ile 23:00 Arası) ---
+            elif 16 <= now.hour < 23:
+                eod_id = f"eod_{today_iso}"
+                if eod_id not in self.notified_events:
+                    cur.execute("SELECT COUNT(*) FROM todo_tasks WHERE is_completed = 0")
+                    todo_count = cur.fetchone()[0]
+                    cur.execute("SELECT COUNT(*) FROM calendar_events WHERE event_date = ? AND is_completed = 0", (today_iso,))
+                    plan_count = cur.fetchone()[0]
+                        
+                    if todo_count > 0 or plan_count > 0:
+                        self.send_tray_notification("Gün Sonu Özeti 🌙", f"Bugün tamamlanmamış {todo_count} görevin ve {plan_count} planın var. Göz atmak ister misin?", color="#f59e0b", sound_key="sound_plans")
+                    self.notified_events.add(eod_id)
+
+            # --- DERS VE KİŞİSEL PLAN HATIRLATICILARI ---
             cur.execute("SELECT setting_value FROM app_settings WHERE setting_key = 'notif_global'")
             if cur.fetchone()[0] == '0': return
             
@@ -1410,7 +1504,7 @@ class MainWindow(QMainWindow):
 
             if notify_classes:
                 cur.execute("""
-                    SELECT c.code, c.name, t.start_time, COALESCE(t.classroom, c.classroom) AS classroom
+                    SELECT c.code, c.name, t.start_time, c.classroom 
                     FROM timetable t 
                     JOIN courses c ON t.course_id = c.id 
                     WHERE t.day_of_week = ?
@@ -1522,8 +1616,9 @@ class MainWindow(QMainWindow):
             ("🏋️ Spor & Alışkanlık", 5, "Zincir & Antrenman Çizelgesi"),
             ("🎵 Müzik & Odak", 6, "YouTube Music & Pomodoro"),
             ("🏫 Üniversite", 7, "OBS & Öğrenci Mail"),
-            ("🚀 Projeler", 8, "Yarışma ve Proje Yönetimi"),
-            ("⚙️ Ayarlar", 9, "Sistem ve Bildirimler")
+            ("📖 Kitaplığım", 8, "Okuma Listesi ve Arşiv"), # <-- YENİ EKLENDİ
+            ("🚀 Projeler", 9, "Yarışma ve Proje Yönetimi"),
+            ("⚙️ Ayarlar", 10, "Sistem ve Bildirimler")
         ]
 
         for text, idx, _ in self.pages_info:
@@ -1635,6 +1730,7 @@ class MainWindow(QMainWindow):
         self.music_view.yt_layout.addWidget(self.yt_webview)
         
         self.university_view = UniversityView(self.db)
+        self.library_view = LibraryView(self.db, self)
         self.project_view = ProjectView(self.db) if ProjectView else QWidget()
         self.settings_view = SettingsView(self)
 
@@ -1646,8 +1742,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.fitness_view)      # 5
         self.stack.addWidget(self.music_view)        # 6
         self.stack.addWidget(self.university_view)   # 7
-        self.stack.addWidget(self.project_view)      # 8
-        self.stack.addWidget(self.settings_view)     # 9
+        self.stack.addWidget(self.library_view)      # 8
+        self.stack.addWidget(self.project_view)      # 9
+        self.stack.addWidget(self.settings_view)     # 10
 
         self.ai_chat_window = AIChatWindow(self, self.db)
         
