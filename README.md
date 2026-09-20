@@ -128,15 +128,7 @@ gibi özellikler sunulur.
 ---
 
 ## 🧠 AI Asistanı
-
-Student Life OS içerisinde farklı AI sağlayıcıları kullanılabilir.
-
-Desteklenen seçenekler:
-
 - Google Gemini
-- OpenAI
-- Anthropic Claude
-- Yerel GGUF modelleri
 
 AI asistanı uygulamanın yerel veritabanındaki bilgilerle çalışabilecek şekilde tasarlanmıştır.
 
@@ -174,49 +166,49 @@ internet bağlantısı olmadan kullanılabilir.
 
 ---
 
-# 🖼️ Uygulama Görüntüleri
+![Açılış Ekranı](images/splash.png)
 
-Uygulamaya ait ekran görüntüleri `images/` klasöründe bulunmaktadır.
+![Uygulama Rehberi](images/guide.png)
 
-### 📊 Kontrol Paneli
+![Kontrol Paneli Boş 1](images/dashboard1.png)
 
-![Kontrol Paneli](images/dashboard.png)
+![Kontrol Paneli Boş 2](images/dashboard2.png)
 
-### ✅ Yapılacaklar
+![Kontrol Paneli Dolu 1](images/bashboard_filled.png)
 
-![Yapılacaklar](images/tasks.png)
+![Kontrol Paneli Dolu 2](images/dashboard_filled2.png)
 
-### 📅 Akıllı Takvim
+![Yapılacaklar (To-Do)](images/todo.png)
 
 ![Akıllı Takvim](images/calendar.png)
 
-### 🎓 Dersler ve Notlar
+![Ders Programı](images/lessons.png)
 
-![Dersler ve Notlar](images/timetable.png)
+![Kişisel Çalışma Planı](images/private_schedule.png)
 
-### 📁 Materyal Kasası
+![Sınavlar ve Not Takibi](images/exams.png)
 
-![Materyal Kasası](images/vault.png)
+![Kitaplık ve Okuma Durumu](images/lib.png)
 
-### 🏋️ Spor ve Alışkanlık
+![Materyal Kasası 1](images/vault1.png)
 
-![Spor ve Alışkanlık](images/fitness.png)
+![Materyal Kasası 2](images/vault2.png)
 
-### 🎵 Müzik ve Odak
+![Alışkanlıklar ve Spor](images/habits.png)
 
-![Müzik ve Odak](images/music.png)
+![Yerel Müzik Çalar](images/musc.png)
 
-### 🎓 Üniversite
+![YouTube Music](images/musc2.png)
 
-![Üniversite](images/uni.png)
+![İnteraktif Odak Sayacı](images/musc3.png)
 
-### 📚 Kitaplık
+![Üniversite Araçları 1](images/uni1.png)
 
-![Üniversite](images/lib.png)
+![Üniversite Araçları 2](images/uni2.png)
 
-### 🤖 AI Asistanı
+![Projeler](images/projects.png)
 
-![AI Asistanı](images/ai-assistant.png)
+![Ayarlar](images/settings.png)
 
 ---
 
@@ -402,48 +394,6 @@ API anahtarları:
 * `.env` veya güvenli yerel yapılandırma yöntemleri tercih edilmelidir.
 
 > Gerçek API anahtarlarınızı GitHub repository'sine kesinlikle yüklemeyin.
-
----
-
-# 🧠 Yerel AI Modeli
-
-Student Life OS, internet bağlantısına ihtiyaç duymadan AI asistanı çalıştırabilmek için yerel GGUF modellerini destekler.
-
-Varsayılan olarak:
-
-**Qwen2.5 Coder 3B Instruct**
-
-modelinin GGUF formatındaki `Q4_K_M` sürümü kullanılabilir.
-
-Model dosyası yaklaşık **1.8 GB** olduğu için GitHub repository'sine dahil edilmez.
-
-Model aşağıdaki konumda bulunmalıdır:
-
-```text
-resources/
-└── models/
-    └── local_model.gguf
-```
-
----
-
-## 📥 Modeli PowerShell ile İndirme
-
-Proje klasöründe PowerShell açın ve:
-
-```powershell
-New-Item -ItemType Directory -Force resources\models | Out-Null
-```
-
-Ardından:
-
-```powershell
-Invoke-WebRequest `
-    -Uri "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf?download=true" `
-    -OutFile "resources\models\local_model.gguf"
-```
-
-İndirme tamamlandıktan sonra model otomatik olarak uygulama tarafından kullanılabilir.
 
 ---
 
