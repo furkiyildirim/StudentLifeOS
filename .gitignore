@@ -6,6 +6,7 @@ __pycache__/
 student_life.db
 student_life.db-*
 vault_storage/
+program_aktar.py
 
 # Large local model files are distributed separately.
 resources/models/*.gguf
@@ -14,8 +15,12 @@ resources/models/*.gguf
 build/
 dist/
 *.spec
+Student OS/
 
 # Local/editor files
 .env
 .vscode/
 *.log
+
+# my database folder
+myfolder/

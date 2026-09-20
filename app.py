@@ -30,7 +30,6 @@ from views.vault_view import VaultView
 from views.fitness_view import FitnessView
 from views.music_view import MusicView
 from views.university_view import UniversityView
-from views.ai_floating_chat import AIChatWindow
 from views.library_view import LibraryView
 
 try:
@@ -635,6 +634,7 @@ class SettingsView(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #ffffff;")
         lay.addWidget(title)
 
+        # Yalnızca Gemini API kutusu
         ai_card = QFrame()
         ai_card.setObjectName("Card")
         a_lay = QVBoxLayout(ai_card)
@@ -643,7 +643,7 @@ class SettingsView(QWidget):
         lbl_ai_title.setStyleSheet("font-size: 15px; font-weight: 700; color: #3b82f6; margin-bottom: 4px;")
         a_lay.addWidget(lbl_ai_title)
         
-        lbl_ai_desc = QLabel("Kullanmak istediğiniz modellere ait API anahtarlarını aşağıya girin:")
+        lbl_ai_desc = QLabel("Google AI Studio'dan aldığınız Gemini API Anahtarını girin:")
         lbl_ai_desc.setStyleSheet("color: #a1a1aa; font-size: 11px; margin-bottom: 8px;")
         a_lay.addWidget(lbl_ai_desc)
         
@@ -652,27 +652,14 @@ class SettingsView(QWidget):
         self.gemini_input.setEchoMode(QLineEdit.Password)
         self.gemini_input.setStyleSheet("background-color: #27272a; border-radius: 6px; padding: 8px; color: white; font-size: 12px; border: 1px solid #3f3f46;")
         a_lay.addWidget(self.gemini_input)
-
-        self.openai_input = QLineEdit(self.get_db_setting('openai_api_key', default=""))
-        self.openai_input.setPlaceholderText("OpenAI (ChatGPT) API Anahtarı...")
-        self.openai_input.setEchoMode(QLineEdit.Password)
-        self.openai_input.setStyleSheet("background-color: #27272a; border-radius: 6px; padding: 8px; color: white; font-size: 12px; border: 1px solid #3f3f46;")
-        a_lay.addWidget(self.openai_input)
-
-        self.anthropic_input = QLineEdit(self.get_db_setting('anthropic_api_key', default=""))
-        self.anthropic_input.setPlaceholderText("Anthropic (Claude) API Anahtarı...")
-        self.anthropic_input.setEchoMode(QLineEdit.Password)
-        self.anthropic_input.setStyleSheet("background-color: #27272a; border-radius: 6px; padding: 8px; color: white; font-size: 12px; border: 1px solid #3f3f46;")
-        a_lay.addWidget(self.anthropic_input)
         
-        btn_save_api = QPushButton("Anahtarları Kaydet")
+        btn_save_api = QPushButton("Anahtarı Kaydet")
         btn_save_api.setCursor(QCursor(Qt.PointingHandCursor))
         btn_save_api.setStyleSheet("background-color: #3b82f6; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold; margin-top: 8px;")
-        btn_save_api.clicked.connect(self.save_api_key)
+        btn_save_api.clicked.connect(self.save_api_key) # Kaydetme metoduna bağlayın
         a_lay.addWidget(btn_save_api)
         
         lay.addWidget(ai_card)
-        
 
         notif_card = QFrame()
         notif_card.setObjectName("Card")
@@ -919,17 +906,9 @@ class SettingsView(QWidget):
 
     def save_api_key(self):
         self.set_db_setting('gemini_api_key', self.gemini_input.text().strip())
-        self.set_db_setting('openai_api_key', self.openai_input.text().strip())
-        self.set_db_setting('anthropic_api_key', self.anthropic_input.text().strip())
+        from core.events import bus
         bus.ai_settings_changed.emit()
-        
-        # Pop-up yerine Toast bildirim
-        if hasattr(self.main_window, 'send_tray_notification'):
-            self.main_window.send_tray_notification(
-                "💾 Ayarlar Kaydedildi", 
-                "Tüm API Anahtarları başarıyla veritabanına kaydedildi.", 
-                color="#10b981"
-            )
+        QMessageBox.information(self, "Başarılı", "API Anahtarı başarıyla kaydedildi.")
 
     def preview_sound(self, sound_val):
         try:
@@ -1690,11 +1669,7 @@ class MainWindow(QMainWindow):
         self.btn_forward.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_forward.clicked.connect(self.go_forward)
 
-        self.btn_toggle_ai = QPushButton("✨ Asistan")
-        self.btn_toggle_ai.setCursor(QCursor(Qt.PointingHandCursor))
-        self.btn_toggle_ai.setStyleSheet("background-color: #3b82f6; color: white; border-radius: 6px; padding: 6px 12px; font-weight: bold; border: none;")
-        self.btn_toggle_ai.clicked.connect(self.toggle_ai_chat)
-        top_lay.addWidget(self.btn_toggle_ai)   
+           
 
         top_lay.addWidget(self.btn_back)
         top_lay.addWidget(self.btn_forward)
@@ -1745,8 +1720,6 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.library_view)      # 8
         self.stack.addWidget(self.project_view)      # 9
         self.stack.addWidget(self.settings_view)     # 10
-
-        self.ai_chat_window = AIChatWindow(self, self.db)
         
         content_container = QWidget()
         content_lay = QHBoxLayout(content_container)
@@ -1754,7 +1727,6 @@ class MainWindow(QMainWindow):
         content_lay.setSpacing(0)
         
         content_lay.addWidget(self.stack)
-        content_lay.addWidget(self.ai_chat_window)
 
         right_lay.addWidget(content_container)
         main_layout.addWidget(right_panel)
@@ -1764,6 +1736,21 @@ class MainWindow(QMainWindow):
         self.network_worker = NetworkWorker()
         self.network_worker.status_changed.connect(self.update_network_ui)
         self.network_worker.start()
+
+        try:
+            from views.ai_floating_chat import AIChatWindow
+            self.ai_chat_window = AIChatWindow(self, self.db)
+            
+            self.btn_floating_ai = QPushButton("✦", self)
+            self.btn_floating_ai.setFixedSize(56, 56)
+            self.btn_floating_ai.setCursor(QCursor(Qt.PointingHandCursor))
+            self.btn_floating_ai.setStyleSheet("""
+                QPushButton { background-color: #3b82f6; color: white; font-size: 26px; border-radius: 28px; border: none; }
+                QPushButton:hover { background-color: #2563eb; }
+            """)
+            self.btn_floating_ai.clicked.connect(self.toggle_ai_chat)
+        except ImportError as e:
+            print(f"Yapay Zeka Modülü Yüklenemedi: {e}")
 
     def toggle_sidebar(self):
         start_w = self.sidebar.width()
@@ -1827,21 +1814,33 @@ class MainWindow(QMainWindow):
             self.sidebar_anim.finished.connect(self.status_lbl.show)
 
         self.sidebar_anim.start()
+
+    def toggle_ai_chat(self):
+        if hasattr(self, 'ai_chat_window') and self.ai_chat_window:
+            if self.ai_chat_window.isVisible():
+                self.ai_chat_window.hide()
+            else:
+                self.update_ai_chat_geometry()
+                self.ai_chat_window.show()
+                self.ai_chat_window.raise_()
+        else:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Hata", "Yapay Zeka modülü yüklenemedi.")
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.update_ai_chat_geometry()
 
-    def toggle_ai_chat(self):
-        if self.ai_chat_window.isVisible():
-            self.ai_chat_window.hide()
-        else:
-            # Önce pencereyi ekranda gösteriyoruz, sonra konumunu güncelliyoruz[cite: 6]
-            self.ai_chat_window.show()
-            self.ai_chat_window.raise_()
-            self.update_ai_chat_geometry()
-
     def update_ai_chat_geometry(self):
-        pass
+        if hasattr(self, 'btn_floating_ai'):
+            btn_x = self.width() - self.btn_floating_ai.width() - 30
+            btn_y = self.height() - self.btn_floating_ai.height() - 30
+            self.btn_floating_ai.move(btn_x, btn_y)
+            
+            if hasattr(self, 'ai_chat_window'):
+                chat_x = btn_x - self.ai_chat_window.width() + self.btn_floating_ai.width()
+                chat_y = btn_y - self.ai_chat_window.height() - 15
+                self.ai_chat_window.move(chat_x, chat_y)
 
     def setup_event_listeners(self):
         bus.todo_changed.connect(self.dashboard_view.refresh)
