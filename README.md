@@ -42,8 +42,6 @@ Student Life OS, üniversite hayatının akademik tarafını tek bir merkezden y
 - Haftalık ders programı
 - Sınav takibi
 - Akademik takvim
-- **Görüntü İşleme (OCR)** ile ders programı fotoğraflarını otomatik olarak tarama
-- OCR ile elde edilen bilgileri sisteme otomatik aktarma
 - Kredi bazlı **Dönem Ortalaması (SPA)** hesaplama
 - **Genel Not Ortalaması (CGPA)** hesaplama
 - To-do listesi
@@ -108,11 +106,9 @@ Farklı dosya formatlarını uygulama içerisinden yönetebilirsiniz.
 
 Desteklenen formatlar:
 
-- HTML
 - PDF
 - DOCX
 - PPTX
-- XLSX
 - CSV
 
 Belgeler için:
@@ -249,12 +245,7 @@ Uygulamanın kullandığı temel kütüphaneler:
 
 Tüm bağımlılıklar `requirements.txt` içerisinde bulunmaktadır.
 
-## Yerel AI Modeli
 
-Yerel AI kullanılacaksa aşağıdaki model dosyasının bulunması gerekir:
-
-```text
-resources/models/local_model.gguf
 # ⚙️ Kurulum
 
 ## 1. Depoyu Klonlayın
@@ -353,12 +344,8 @@ komutuyla sanal ortamı tekrar aktive edin.
 Uygulama içerisindeki **Ayarlar** ekranından çeşitli seçenekler yönetilebilir.
 
 ### 🤖 AI Ayarları
-
-* AI sağlayıcısı seçimi
 * Gemini API anahtarı
-* OpenAI API anahtarı
-* Anthropic API anahtarı
-* Yerel AI modeli
+
 
 ### 🔔 Bildirimler
 
@@ -541,8 +528,6 @@ Uygulamanın temel kullanımında zorunlu bir bulut hesabı bulunmaz.
 Ancak aşağıdaki özellikler harici servislerin kullanılmasını gerektirebilir:
 
 * Gemini
-* OpenAI
-* Anthropic
 * YouTube Music
 * Hava durumu servisleri
 
