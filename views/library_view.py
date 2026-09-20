@@ -27,6 +27,7 @@ class BookCard(QFrame):
         self.data = data
         self.parent_view = parent_view
         self.setObjectName("Card")
+        # Kartın ekranın tamamını (%100) kaplamasını sağlayan, ferah CSS tasarımı
         self.setStyleSheet("""
             QFrame#Card {
                 background-color: #171412;
@@ -42,38 +43,38 @@ class BookCard(QFrame):
 
     def init_ui(self):
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(16, 14, 16, 14)
-        lay.setSpacing(16)
+        lay.setContentsMargins(20, 16, 20, 16)
+        lay.setSpacing(20)
 
-        # 1. Kapak Görseli
+        # 1. Kapak Görseli (Boyutu ve netliği artırıldı)
         self.lbl_cover = QLabel()
-        self.lbl_cover.setFixedSize(70, 100)
+        self.lbl_cover.setFixedSize(85, 125)
         self.lbl_cover.setStyleSheet("background-color: #27272a; border-radius: 6px; border: 1px solid #3f3f46;")
         self.lbl_cover.setAlignment(Qt.AlignCenter)
         
         cover_path = self.data.get("cover_path")
         if cover_path and os.path.exists(cover_path):
             pixmap = QPixmap(cover_path)
-            self.lbl_cover.setPixmap(pixmap.scaled(70, 100, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
+            self.lbl_cover.setPixmap(pixmap.scaled(85, 125, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
         else:
             self.lbl_cover.setText("📖")
-            self.lbl_cover.setStyleSheet("background-color: #27272a; font-size: 28px; border-radius: 6px; border: 1px solid #3f3f46;")
+            self.lbl_cover.setStyleSheet("background-color: #27272a; font-size: 32px; border-radius: 6px; border: 1px solid #3f3f46;")
         
         lay.addWidget(self.lbl_cover)
 
         # 2. Orta Bilgi Alanı (Başlık, Yazar, Sayfa, Rozetler)
         info_lay = QVBoxLayout()
-        info_lay.setSpacing(4)
+        info_lay.setSpacing(6)
         
         lbl_title = QLabel(self.data["title"])
-        lbl_title.setStyleSheet("font-size: 16px; font-weight: 800; color: #ffffff;")
+        lbl_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #ffffff;")
         lbl_title.setWordWrap(True)
         
         lbl_author = QLabel(self.data.get("author") or "Bilinmeyen Yazar")
-        lbl_author.setStyleSheet("font-size: 13px; color: #a1a1aa; font-weight: 500;")
+        lbl_author.setStyleSheet("font-size: 14px; color: #a1a1aa; font-weight: 500;")
         
         lbl_pages = QLabel(f"{self.data.get('page_count', 0)} Sayfa")
-        lbl_pages.setStyleSheet("font-size: 11px; color: #71717a;")
+        lbl_pages.setStyleSheet("font-size: 12px; color: #71717a;")
         
         info_lay.addWidget(lbl_title)
         info_lay.addWidget(lbl_author)
@@ -82,11 +83,11 @@ class BookCard(QFrame):
 
         # --- ROZETLER ---
         badges_lay = QHBoxLayout()
-        badges_lay.setSpacing(8)
+        badges_lay.setSpacing(10)
         
         genre = self.data.get("genre") or "Diğer"
         lbl_genre = QLabel(genre)
-        lbl_genre.setStyleSheet("background-color: #3b1d68; color: #d8b4fe; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px;")
+        lbl_genre.setStyleSheet("background-color: #3b1d68; color: #d8b4fe; font-size: 11px; font-weight: bold; padding: 5px 12px; border-radius: 6px;")
         badges_lay.addWidget(lbl_genre)
         
         status = self.data.get("status") or "Okunacak"
@@ -98,10 +99,9 @@ class BookCard(QFrame):
         bg_col, fg_col, border_col = status_colors.get(status, ("#27272a", "#ffffff", "#3f3f46"))
         
         lbl_status = QLabel(status)
-        lbl_status.setStyleSheet(f"background-color: {bg_col}; color: {fg_col}; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid {border_col};")
+        lbl_status.setStyleSheet(f"background-color: {bg_col}; color: {fg_col}; font-size: 11px; font-weight: bold; padding: 5px 12px; border-radius: 6px; border: 1px solid {border_col};")
         badges_lay.addWidget(lbl_status)
         
-        # --- İADE / ÖDÜNÇ KONTROLÜ ---
         active_return_event = self.has_active_return_event(self.data.get('title'))
         
         if self.data.get("is_borrowed"):
@@ -114,59 +114,80 @@ class BookCard(QFrame):
                     formatted_date = return_dt_str
                     
                 lbl_borrow = QLabel(f"⏳ İade: {formatted_date}")
-                lbl_borrow.setStyleSheet("background-color: rgba(244, 63, 94, 0.15); color: #f43f5e; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid #f43f5e;")
+                lbl_borrow.setStyleSheet("background-color: rgba(244, 63, 94, 0.15); color: #f43f5e; font-size: 11px; font-weight: bold; padding: 5px 12px; border-radius: 6px; border: 1px solid #f43f5e;")
                 badges_lay.addWidget(lbl_borrow)
             else:
                 lbl_borrow = QLabel("✅ İade Edildi / Teslim")
-                lbl_borrow.setStyleSheet("background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; font-weight: bold; padding: 4px 10px; border-radius: 6px; border: 1px solid #10b981;")
+                lbl_borrow.setStyleSheet("background-color: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 11px; font-weight: bold; padding: 5px 12px; border-radius: 6px; border: 1px solid #10b981;")
                 badges_lay.addWidget(lbl_borrow)
 
         badges_lay.addStretch()
         info_lay.addLayout(badges_lay)
+        
+        # stretch=1 diyerek orta alanın kart sağa doğru uzadıkça esnemesini (butonların en sağa itilmesini) sağlıyoruz.
         lay.addLayout(info_lay, stretch=1)
 
-        # 3. Sağ Taraf İşlem Butonları
-        btn_lay = QVBoxLayout()
-        btn_lay.setAlignment(Qt.AlignTop | Qt.AlignRight)
-        btn_lay.setSpacing(8)
+        # 3. Sağ Taraf İşlem Butonları (Tamamen hizalandı, sıkışıklık önlendi)
+        right_panel_lay = QVBoxLayout()
+        right_panel_lay.setSpacing(8)
+        right_panel_lay.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
-        btn_style = "font-weight: bold; border-radius: 6px; padding: 6px 14px; font-size: 12px; min-width: 90px;"
+        btn_style_primary = "font-weight: bold; border-radius: 6px; padding: 8px 16px; font-size: 13px; min-width: 140px;"
+        btn_style_secondary = "font-weight: bold; border-radius: 6px; padding: 6px 12px; font-size: 12px;"
+
+        if status == "Okunacak":
+            btn_start_read = QPushButton("📖 Okumaya Başla")
+            btn_start_read.setCursor(QCursor(Qt.PointingHandCursor))
+            btn_start_read.setStyleSheet(f"background-color: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #0284c7; {btn_style_primary}")
+            btn_start_read.clicked.connect(lambda: self.parent_view.change_book_status(self.data["id"], self.data["title"], "Okunuyor"))
+            right_panel_lay.addWidget(btn_start_read)
+            
+        elif status == "Okunuyor":
+            btn_mark_read = QPushButton("✅ Okundu Yap")
+            btn_mark_read.setCursor(QCursor(Qt.PointingHandCursor))
+            btn_mark_read.setStyleSheet(f"background-color: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #10b981; {btn_style_primary}")
+            btn_mark_read.clicked.connect(lambda: self.parent_view.change_book_status(self.data["id"], self.data["title"], "Okundu"))
+            right_panel_lay.addWidget(btn_mark_read)
         
         if self.data.get("is_borrowed") and active_return_event:
             btn_return = QPushButton("📥 İade Et")
             btn_return.setCursor(QCursor(Qt.PointingHandCursor))
-            btn_return.setStyleSheet(f"background-color: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; {btn_style}")
+            btn_return.setStyleSheet(f"background-color: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #0284c7; {btn_style_primary}")
             btn_return.clicked.connect(lambda: self.parent_view.return_borrowed_book(self.data["id"], self.data["title"]))
-            btn_lay.addWidget(btn_return)
+            right_panel_lay.addWidget(btn_return)
             
         pdf_path = self.data.get("pdf_path")
         if pdf_path and os.path.exists(pdf_path):
             btn_pdf = QPushButton("📕 PDF'i Aç")
             btn_pdf.setCursor(QCursor(Qt.PointingHandCursor))
-            btn_pdf.setStyleSheet(f"background-color: #e11d48; color: white; {btn_style}")
+            btn_pdf.setStyleSheet(f"background-color: #e11d48; color: white; {btn_style_primary}")
             btn_pdf.clicked.connect(lambda: self.parent_view.open_pdf_in_vault(pdf_path))
-            btn_lay.addWidget(btn_pdf)
+            right_panel_lay.addWidget(btn_pdf)
             
+        right_panel_lay.addStretch()
+
+        action_lay = QHBoxLayout()
+        action_lay.setSpacing(8)
+        
         btn_edit = QPushButton("✏️ Düzenle")
         btn_edit.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_edit.setStyleSheet(f"background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; {btn_style}")
+        btn_edit.setStyleSheet(f"background-color: #27272a; color: #f4f4f5; border: 1px solid #3f3f46; {btn_style_secondary}")
         btn_edit.clicked.connect(lambda: self.parent_view.dialog_add_edit_book(self.data))
-        btn_lay.addWidget(btn_edit)
         
         btn_delete = QPushButton("🗑 Sil")
         btn_delete.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_delete.setStyleSheet(f"background-color: transparent; color: #f87171; border: none; {btn_style}")
+        btn_delete.setStyleSheet(f"background-color: transparent; color: #f87171; border: 1px solid transparent; {btn_style_secondary}")
         btn_delete.clicked.connect(lambda: self.parent_view.delete_book(self.data["id"]))
-        btn_lay.addWidget(btn_delete)
         
-        btn_lay.addStretch()
-        lay.addLayout(btn_lay)
+        action_lay.addWidget(btn_edit)
+        action_lay.addWidget(btn_delete)
+        
+        right_panel_lay.addLayout(action_lay)
+        lay.addLayout(right_panel_lay)
 
     def has_active_return_event(self, title):
-        """Takvimde henüz silinmemiş VE tamamlanmamış aktif bir iade görevi var mı kontrol eder."""
         with self.parent_view.db.get_connection() as conn:
             cur = conn.cursor()
-            # is_completed = 0 şartı eklendi: Eğer takvimde tamamlandıysa burası False döner ve kitap iade edilmiş sayılır.
             cur.execute(
                 "SELECT id FROM calendar_events WHERE title LIKE ? AND category = 'Kitap İade' AND is_completed = 0", 
                 (f"Kitap İadesi: {title}%",)
@@ -273,20 +294,13 @@ class LibraryView(QWidget):
         filter_bar.addWidget(self.filter_genre, stretch=1)
         main_lay.addLayout(filter_bar)
 
+        # --- YENİ LİSTE YAPISI: Yüzde Yüz Ekranı Kaplayan Dikey Liste ---
         self.books_list = QListWidget()
-        self.books_list.setViewMode(QListWidget.IconMode)
-        self.books_list.setFlow(QListWidget.LeftToRight)
-        self.books_list.setResizeMode(QListWidget.Adjust) 
-        self.books_list.setMovement(QListWidget.Static)
-        self.books_list.setWrapping(True) 
-        self.books_list.setSpacing(18)
-        self.books_list.setUniformItemSizes(True) 
-        self.books_list.setGridSize(QSize(560, 185)) 
-        
+        self.books_list.setSpacing(14)
         self.books_list.setStyleSheet("""
             QListWidget { background: transparent; border: none; outline: none; }
-            QListWidget::item { background: transparent; }
-            QListWidget::item:selected { background: transparent; border: none; }
+            QListWidget::item { background: transparent; outline: none; border: none; }
+            QListWidget::item:selected { background: transparent; border: none; outline: none; }
             QScrollBar:vertical { background: #171412; width: 10px; border-radius: 5px; }
             QScrollBar::handle:vertical { background: #3f3f46; border-radius: 5px; }
             QScrollBar::handle:vertical:hover { background: #38bdf8; }
@@ -315,7 +329,8 @@ class LibraryView(QWidget):
             query += " AND genre = ?"
             params.append(f_genre)
             
-        query += " ORDER BY status ASC, id DESC"
+        # Önceliklendirme: Önce okunanlar, sonra okunacaklar, en son okunanlar
+        query += " ORDER BY CASE status WHEN 'Okunuyor' THEN 1 WHEN 'Okunacak' THEN 2 WHEN 'Okundu' THEN 3 ELSE 4 END, id DESC"
 
         with self.db.get_connection() as conn:
             cur = conn.cursor()
@@ -324,10 +339,10 @@ class LibraryView(QWidget):
 
         for b in books:
             card = BookCard(dict(b), self)
-            card.setFixedSize(540, 165) 
             
             item = QListWidgetItem()
-            item.setSizeHint(QSize(540, 165)) 
+            # Genişliği 0 bırakarak %100 yatay esnemesini, Yüksekliğini ise 180px sabit olmasını sağlıyoruz
+            item.setSizeHint(QSize(0, 180)) 
             
             self.books_list.addItem(item)
             self.books_list.setItemWidget(item, card)
@@ -337,6 +352,25 @@ class LibraryView(QWidget):
             empty.setForeground(QColor("#71717a"))
             empty.setTextAlignment(Qt.AlignCenter)
             self.books_list.addItem(empty)
+
+    def change_book_status(self, b_id: int, title: str, new_status: str):
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("UPDATE books SET status = ? WHERE id = ?", (new_status, b_id))
+            conn.commit()
+            
+        try: play_action_sound("complete")
+        except: pass
+        
+        if new_status == "Okundu":
+            bus.item_saved.emit(f"Tebrikler! '{title}' kitabını bitirdiniz.")
+        elif new_status == "Okunuyor":
+            bus.item_saved.emit(f"'{title}' kitabını okumaya başladınız. İyi okumalar!")
+            
+        self.load_books()
+        
+        if hasattr(self.main_window, "dashboard_view"):
+            self.main_window.dashboard_view.refresh()
 
     def return_borrowed_book(self, b_id: int, title: str):
         confirm = QMessageBox.question(
@@ -356,8 +390,14 @@ class LibraryView(QWidget):
             except: pass
             
             bus.calendar_changed.emit()
-            bus.item_deleted.emit(f"'{title}' kitabının iade görevi başarıyla tamamlandı ve silindi.")
+            try:
+                bus.item_deleted.emit(f"'{title}' kitabının iade görevi başarıyla tamamlandı ve silindi.")
+            except: pass
+            
             self.load_books()
+            
+            if hasattr(self.main_window, "dashboard_view"):
+                self.main_window.dashboard_view.refresh()
 
     def dialog_add_edit_book(self, book_data=None):
         is_edit = book_data is not None
@@ -543,7 +583,6 @@ class LibraryView(QWidget):
                           status_cb.currentText(), c_path, p_path, is_borrow, r_loc, r_date_iso, p_count))
                 conn.commit()
 
-            # Takvime Genel kategorisinde ekle
             if is_borrow and r_date_iso:
                 event_title = f"Kitap İadesi: {title_in.text().strip()} ({r_loc})"
                 with self.db.get_connection() as conn:
@@ -562,6 +601,9 @@ class LibraryView(QWidget):
             except: pass
             dlg.accept()
             self.load_books()
+            
+            if hasattr(self.main_window, "dashboard_view"):
+                self.main_window.dashboard_view.refresh()
 
         btn_save.clicked.connect(save)
         dlg.exec()
@@ -591,6 +633,9 @@ class LibraryView(QWidget):
                 play_action_sound("delete")
             except: pass
             self.load_books()
+            
+            if hasattr(self.main_window, "dashboard_view"):
+                self.main_window.dashboard_view.refresh()
 
     def open_pdf_in_vault(self, pdf_path):
         if not hasattr(self.main_window, "vault_view"): return

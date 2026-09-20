@@ -286,11 +286,6 @@ class VaultView(QWidget):
         btn_new_note.setStyleSheet("QPushButton#VaultNewNoteButton { background: #0e7490; color: #ecfeff; border: 1px solid #22d3ee; border-radius: 9px; padding: 8px 14px; font-weight: 800; } QPushButton#VaultNewNoteButton:hover { background: #0891b2; color: white; }")
         btn_new_note.clicked.connect(self.new_note)
 
-        btn_import_note = QPushButton("📥 İçe Aktar (TXT/MD/DOCX)")
-        btn_import_note.setCursor(QCursor(Qt.PointingHandCursor))
-        btn_import_note.setStyleSheet("background-color: #27272a; padding: 6px; border-radius: 4px; border: 1px solid #3f3f46;")
-        btn_import_note.clicked.connect(self.import_note)
-
         self.notes_list = QListWidget()
         self.notes_list.setFixedWidth(250)
         self.notes_list.itemClicked.connect(self.open_note)
@@ -305,7 +300,6 @@ class VaultView(QWidget):
         btn_delete_note.clicked.connect(self.delete_active_note)
 
         left_box.addWidget(btn_new_note)
-        left_box.addWidget(btn_import_note)
         left_box.addWidget(self.notes_list)
         left_box.addWidget(btn_delete_note)
         lay.addLayout(left_box)
@@ -529,34 +523,6 @@ class VaultView(QWidget):
             self.new_note()
             self.load_notes()
             bus.notes_changed.emit()
-
-    def import_note(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Not İçe Aktar", "", "Metin ve Word Dosyaları (*.txt *.md *.docx)")
-        if not path: return
-        
-        try:
-            content = ""
-            title = os.path.basename(path).rsplit('.', 1)[0]
-            
-            if path.lower().endswith(".docx"):
-                if not DOCX_AVAILABLE:
-                    QMessageBox.warning(self, "Hata", "Word dosyalarını okumak için 'python-docx' kütüphanesi gerekli.")
-                    return
-                doc = docx.Document(path)
-                content = "<br>".join([p.text for p in doc.paragraphs if p.text.strip()])
-            else:
-                with open(path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    
-            with self.db.get_connection() as conn:
-                conn.cursor().execute("INSERT INTO notes (title, content) VALUES (?, ?)", (title, content))
-                conn.commit()
-            
-            self.load_notes()
-            bus.notes_changed.emit()
-            QMessageBox.information(self, "Başarılı", "Belge içe aktarıldı.")
-        except Exception as e:
-            QMessageBox.critical(self, "Hata", f"Dosya okunamadı: {e}")
 
     def export_note(self):
         title = self.note_title_edit.toPlainText().strip()

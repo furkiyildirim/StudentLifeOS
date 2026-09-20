@@ -917,6 +917,7 @@ class DashboardView(QWidget):
         self.grid.addWidget(self.create_exam_countdown_card(), 0, 1)
         self.grid.addWidget(self.create_workout_focus_card(), 1, 1)
 
+        self.grid.addWidget(self.create_library_card(), 2, 0, 1, 2)
     def create_timeline_card(self):
         card = QFrame()
         card.setObjectName("Card")
@@ -1194,6 +1195,86 @@ class DashboardView(QWidget):
         lay.addStretch()
         return card
 
+    def create_library_card(self):
+        card = QFrame()
+        card.setObjectName("Card")
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(14, 14, 14, 14)
+        lay.setSpacing(10)
+
+        # Kart Başlığı
+        title = QLabel("📖 Kitaplık & Okuma Durumu")
+        title.setObjectName("CardHeader")
+        title.setWordWrap(False)
+        title.setStyleSheet("background: #115e59; border: 1px solid #10b981; border-radius: 7px; padding: 6px 8px; font-size: 13px; font-weight: 800; color: #d1fae5;")
+        lay.addWidget(title)
+
+        # Veritabanından İstatistikleri Çekme
+        finished_count = 0
+        total_pages = 0
+        current_books = []
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                
+                # Bitirilen Kitap Sayısı
+                cur.execute("SELECT COUNT(*) FROM books WHERE status = 'Okundu'")
+                finished_count = cur.fetchone()[0] or 0
+                
+                # Okunan Toplam Sayfa
+                cur.execute("SELECT SUM(page_count) FROM books WHERE status = 'Okundu'")
+                total_pages = cur.fetchone()[0] or 0
+                
+                # Okunmakta Olan TÜM Kitaplar (LIMIT 1 kaldırıldı)
+                cur.execute("SELECT title, author, page_count FROM books WHERE status = 'Okunuyor' ORDER BY id DESC")
+                current_books = cur.fetchall()
+        except Exception:
+            pass # Eğer books tablosu henüz yoksa hata vermesini engeller
+            
+        # İstatistik Etiketi
+        lbl_lib_stats = QLabel(f"📚 Bitirilen: {finished_count} Kitap  |  📄 Okunan Toplam: {total_pages} Sayfa")
+        lbl_lib_stats.setStyleSheet("color: #a1a1aa; font-size: 12px; font-weight: bold; margin-bottom: 2px;")
+        lay.addWidget(lbl_lib_stats)
+        
+        # Aktif Okunan Kitap(lar) Kutusu
+        lbl_current_book = QLabel()
+        lbl_current_book.setStyleSheet("""
+            QLabel {
+                background-color: rgba(16, 185, 129, 0.1); 
+                border: 1px solid rgba(16, 185, 129, 0.25); 
+                border-radius: 8px; 
+                padding: 12px;
+            }
+        """)
+        lbl_current_book.setWordWrap(True)
+        
+        if current_books:
+            html_content = ""
+            for i, book in enumerate(current_books):
+                b_title = book["title"]
+                b_author = book["author"] or "Bilinmeyen Yazar"
+                b_pages = book["page_count"] or 0
+                
+                # Kitapların arasına şık bir ayırıcı çizgi (border) ekleme
+                margin_bottom = "8px" if i < len(current_books) - 1 else "0px"
+                padding_bottom = "8px" if i < len(current_books) - 1 else "0px"
+                border_bottom = "border-bottom: 1px solid rgba(16, 185, 129, 0.25);" if i < len(current_books) - 1 else ""
+                
+                html_content += f"""
+                <div style='margin-bottom: {margin_bottom}; padding-bottom: {padding_bottom}; {border_bottom}'>
+                    <div style='margin-bottom: 4px;'><b style='color:#34d399; font-size:14px;'>{b_title}</b></div>
+                    <div style='color:#d4d4d8; font-size:12px;'>✍️ {b_author} &nbsp;•&nbsp; 🔖 {b_pages} Sayfa</div>
+                </div>
+                """
+            lbl_current_book.setText(html_content)
+        else:
+            lbl_current_book.setText(
+                "<span style='color:#a1a1aa; font-style:italic;'>Şu an aktif olarak okuduğunuz bir kitap bulunmuyor.<br>Kitaplığınızdan yeni bir serüvene başlayın!</span>"
+            )
+            
+        lay.addWidget(lbl_current_book)
+        lay.addStretch()
+        return card
     # =========================================================================
     # HIZLI İŞLEM DİYALOGLARI
     # =========================================================================
