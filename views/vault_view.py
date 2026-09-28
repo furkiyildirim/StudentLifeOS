@@ -1,17 +1,18 @@
 import os
 import shutil
 import csv
+from urllib.parse import quote
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QTextEdit, QPushButton, QFileDialog,
     QMessageBox, QTabWidget, QScrollArea, QStackedWidget, 
     QComboBox, QFrame, QDialog, QLineEdit, QColorDialog, 
-    QFontComboBox, QTableWidget, QTableWidgetItem, QApplication
+    QFontComboBox, QTableWidget, QTableWidgetItem, QApplication, QMenu
 )
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import (
     QPixmap, QCursor, QFont, QTextCharFormat, 
-    QTextListFormat
+    QTextListFormat, QAction
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineSettings
@@ -40,7 +41,59 @@ except ImportError:
 VAULT_DIR = "vault_storage"
 
 # =========================================================================
-# ANA EKRANA GÖMÜLÜ EXCEL/CSV TABLO EDİTÖRÜ (GELİŞMİŞ SÜRÜM)
+# ORTAK YARDIMCI: ÇEVİRİ PENCERESİ (GOOGLE TRANSLATE)
+# =========================================================================
+def open_translation_dialog(parent, text=""):
+    dlg = QDialog(parent)
+    dlg.setWindowTitle("🌐 Hızlı Çeviri (Google Translate)")
+    dlg.resize(900, 650)
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(0, 0, 0, 0)
+    web = QWebEngineView()
+    
+    if text and text.strip():
+        url = f"https://translate.google.com/?sl=auto&tl=tr&text={quote(text)}&op=translate"
+    else:
+        url = "https://translate.google.com/?sl=auto&tl=tr"
+        
+    web.setUrl(QUrl(url))
+    lay.addWidget(web)
+    dlg.exec()
+
+# =========================================================================
+# GELİŞMİŞ WEB GÖRÜNTÜLEYİCİ (ÇEVİRİ VE SAĞ TIK DESTEKLİ)
+# =========================================================================
+class TranslationWebEngineView(QWebEngineView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.settings().setAttribute(QWebEngineSettings.PluginsEnabled, True)
+        self.settings().setAttribute(QWebEngineSettings.PdfViewerEnabled, True)
+
+    def contextMenuEvent(self, event):
+        self.page().runJavaScript("window.getSelection().toString();", lambda text: self.show_menu(text, event.globalPos()))
+
+    def show_menu(self, text, pos):
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background-color: #18181b; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 4px; font-size: 13px; }
+            QMenu::item { padding: 6px 24px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #27272a; }
+        """)
+        
+        if text and text.strip():
+            action_copy = menu.addAction("📋 Kopyala")
+            action_copy.triggered.connect(lambda: QApplication.clipboard().setText(text))
+            
+            action_translate = menu.addAction("🌐 Çevir")
+            action_translate.triggered.connect(lambda: open_translation_dialog(self, text))
+            menu.addSeparator()
+            
+        action_reload = menu.addAction("🔄 Yenile / Düzenle")
+        action_reload.triggered.connect(self.reload)
+        menu.exec(pos)
+
+# =========================================================================
+# ANA EKRANA GÖMÜLÜ EXCEL/CSV TABLO EDİTÖRÜ 
 # =========================================================================
 class SpreadsheetEditorWidget(QWidget):
     def __init__(self, db, vault_view):
@@ -55,7 +108,6 @@ class SpreadsheetEditorWidget(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         
-        # --- ARAÇ ÇUBUĞU ---
         top_lay = QHBoxLayout()
         self.file_name_input = QLineEdit()
         self.file_name_input.setPlaceholderText("Dosya Adı (Örn: giderler.csv)")
@@ -88,8 +140,9 @@ class SpreadsheetEditorWidget(QWidget):
         top_lay.addWidget(btn_save)
         lay.addLayout(top_lay)
 
-        # --- TABLO IZGARASI ---
         self.table = QTableWidget(15, 6)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_table_menu)
         self.table.setStyleSheet("""
             QTableWidget { background-color: #ffffff; color: #000000; gridline-color: #d4d4d8; font-size: 13px; }
             QTableWidget QLineEdit { color: #000000; background-color: #ffffff; selection-background-color: #93c5fd; }
@@ -97,68 +150,90 @@ class SpreadsheetEditorWidget(QWidget):
         """)
         lay.addWidget(self.table)
 
-        # --- FONKSİYON BAĞLANTILARI ---
-        def insert_row():
-            r = self.table.currentRow()
-            self.table.insertRow(r if r >= 0 else self.table.rowCount())
+        btn_add_row.clicked.connect(self.insert_row)
+        btn_add_col.clicked.connect(self.insert_col)
+        btn_del_row.clicked.connect(self.remove_row)
+        btn_del_col.clicked.connect(self.remove_col)
+        btn_clear.clicked.connect(self.clear_cells)
+        btn_copy.clicked.connect(self.copy_cells)
+        btn_paste.clicked.connect(self.paste_cells)
+        btn_save.clicked.connect(self.save_file)
 
-        def insert_col():
-            c = self.table.currentColumn()
-            self.table.insertColumn(c if c >= 0 else self.table.columnCount())
+    def show_table_menu(self, pos):
+        menu = QMenu(self.table)
+        menu.setStyleSheet("""
+            QMenu { background-color: #18181b; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 4px; font-size: 13px; }
+            QMenu::item { padding: 6px 24px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #27272a; }
+        """)
+        
+        action_copy = menu.addAction("📋 Kopyala")
+        action_paste = menu.addAction("📋 Yapıştır")
+        action_copy.triggered.connect(self.copy_cells)
+        action_paste.triggered.connect(self.paste_cells)
+        menu.addSeparator()
+        
+        selected_items = self.table.selectedItems()
+        if selected_items:
+            text_to_translate = selected_items[0].text()
+            if text_to_translate.strip():
+                action_translate = menu.addAction("🌐 Seçili Hücreyi Çevir")
+                action_translate.triggered.connect(lambda: open_translation_dialog(self, text_to_translate))
+            
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def insert_row(self):
+        r = self.table.currentRow()
+        self.table.insertRow(r if r >= 0 else self.table.rowCount())
+
+    def insert_col(self):
+        c = self.table.currentColumn()
+        self.table.insertColumn(c if c >= 0 else self.table.columnCount())
+        self.refresh_headers()
+    
+    def remove_row(self):
+        r = self.table.currentRow()
+        if r >= 0: self.table.removeRow(r)
+        
+    def remove_col(self):
+        c = self.table.currentColumn()
+        if c >= 0: 
+            self.table.removeColumn(c)
             self.refresh_headers()
         
-        def remove_row():
-            r = self.table.currentRow()
-            if r >= 0: self.table.removeRow(r)
-            
-        def remove_col():
-            c = self.table.currentColumn()
-            if c >= 0: 
-                self.table.removeColumn(c)
-                self.refresh_headers()
-            
-        def clear_cells():
-            for item in self.table.selectedItems():
-                item.setText("")
+    def clear_cells(self):
+        for item in self.table.selectedItems():
+            item.setText("")
 
-        def copy_cells():
-            selection = self.table.selectedIndexes()
-            if not selection: return
-            rows = sorted(index.row() for index in selection)
-            columns = sorted(index.column() for index in selection)
-            rowcount = rows[-1] - rows[0] + 1
-            colcount = columns[-1] - columns[0] + 1
-            table = [[''] * colcount for _ in range(rowcount)]
-            for index in selection:
-                row = index.row() - rows[0]
-                column = index.column() - columns[0]
-                table[row][column] = str(index.data() or "")
-            stream = '\n'.join(['\t'.join(row) for row in table])
-            QApplication.clipboard().setText(stream)
+    def copy_cells(self):
+        selection = self.table.selectedIndexes()
+        if not selection: return
+        rows = sorted(index.row() for index in selection)
+        columns = sorted(index.column() for index in selection)
+        rowcount = rows[-1] - rows[0] + 1
+        colcount = columns[-1] - columns[0] + 1
+        table = [[''] * colcount for _ in range(rowcount)]
+        for index in selection:
+            row = index.row() - rows[0]
+            column = index.column() - columns[0]
+            table[row][column] = str(index.data() or "")
+        stream = '\n'.join(['\t'.join(row) for row in table])
+        QApplication.clipboard().setText(stream)
 
-        def paste_cells():
-            text = QApplication.clipboard().text()
-            if not text: return
-            rows = text.split('\n')
-            current_row = self.table.currentRow()
-            current_col = self.table.currentColumn()
-            if current_row < 0: current_row = 0
-            if current_col < 0: current_col = 0
-            
-            for r, row in enumerate(rows):
-                cols = row.split('\t')
-                for c, val in enumerate(cols):
-                    if current_row + r < self.table.rowCount() and current_col + c < self.table.columnCount():
-                        self.table.setItem(current_row + r, current_col + c, QTableWidgetItem(val))
-
-        btn_add_row.clicked.connect(insert_row)
-        btn_add_col.clicked.connect(insert_col)
-        btn_del_row.clicked.connect(remove_row)
-        btn_del_col.clicked.connect(remove_col)
-        btn_clear.clicked.connect(clear_cells)
-        btn_copy.clicked.connect(copy_cells)
-        btn_paste.clicked.connect(paste_cells)
-        btn_save.clicked.connect(self.save_file)
+    def paste_cells(self):
+        text = QApplication.clipboard().text()
+        if not text: return
+        rows = text.split('\n')
+        current_row = self.table.currentRow()
+        current_col = self.table.currentColumn()
+        if current_row < 0: current_row = 0
+        if current_col < 0: current_col = 0
+        
+        for r, row in enumerate(rows):
+            cols = row.split('\t')
+            for c, val in enumerate(cols):
+                if current_row + r < self.table.rowCount() and current_col + c < self.table.columnCount():
+                    self.table.setItem(current_row + r, current_col + c, QTableWidgetItem(val))
 
     def refresh_headers(self):
         self.table.setHorizontalHeaderLabels([chr(65 + c) if c < 26 else f"Col{c}" for c in range(self.table.columnCount())])
@@ -249,9 +324,10 @@ class SpreadsheetEditorWidget(QWidget):
 
 
 class VaultView(QWidget):
-    def __init__(self, db):
+    def __init__(self, db, main_window=None):
         super().__init__()
         self.db = db
+        self.main_window = main_window
         if not os.path.exists(VAULT_DIR):
             os.makedirs(VAULT_DIR)
             
@@ -261,6 +337,26 @@ class VaultView(QWidget):
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
+
+        header_lay = QHBoxLayout()
+        
+        lbl_title = QLabel("🗄️ Materyal & Not Kasası")
+        lbl_title.setStyleSheet("font-size: 20px; font-weight: 800; color: #ffffff;")
+        
+        btn_translate = QPushButton("🌐 Hızlı Çevirmen")
+        btn_translate.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_translate.setStyleSheet("""
+            QPushButton { background-color: #4f46e5; color: white; border-radius: 8px; padding: 8px 16px; font-weight: 800; font-size: 13px; border: none; }
+            QPushButton:hover { background-color: #4338ca; }
+        """)
+        btn_translate.clicked.connect(lambda: open_translation_dialog(self, ""))
+        
+        header_lay.addWidget(lbl_title)
+        header_lay.addStretch()
+        header_lay.addWidget(btn_translate)
+        
+        layout.addLayout(header_lay)
+        layout.addSpacing(10)
 
         tabs = QTabWidget()
         tabs.addTab(self.create_notes_tab(), "📝 Gelişmiş Not Defteri")
@@ -399,6 +495,8 @@ class VaultView(QWidget):
 
         self.editor = QTextEdit()
         self.editor.setPlaceholderText("Ders notlarınızı buraya yazın...")
+        self.editor.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.editor.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.editor.setStyleSheet("""
             QTextEdit {
                 background-color: #ffffff;
@@ -414,6 +512,21 @@ class VaultView(QWidget):
         lay.addWidget(editor_box)
         self.load_notes()
         return tab
+
+    def show_editor_context_menu(self, pos):
+        menu = self.editor.createStandardContextMenu()
+        menu.setStyleSheet("""
+            QMenu { background-color: #18181b; color: #f4f4f5; border: 1px solid #3f3f46; border-radius: 6px; padding: 4px; font-size: 13px; }
+            QMenu::item { padding: 6px 24px; border-radius: 4px; }
+            QMenu::item:selected { background-color: #27272a; }
+        """)
+        cursor = self.editor.textCursor()
+        if cursor.hasSelection():
+            menu.addSeparator()
+            action_translate = menu.addAction("🌐 Seçili Metni Çevir")
+            action_translate.triggered.connect(lambda: open_translation_dialog(self, cursor.selectedText()))
+            
+        menu.exec(self.editor.mapToGlobal(pos))
 
     def change_font(self, font):
         fmt = QTextCharFormat()
@@ -550,13 +663,13 @@ class VaultView(QWidget):
             QMessageBox.critical(self, "Hata", f"Kaydetme başarısız: {e}")
 
     # =========================================================================
-    # 2. BÖLÜM: YEREL MATERYAL HAVUZU (Yerleşik Tablo Editörü)
+    # 2. BÖLÜM: YEREL MATERYAL HAVUZU (SEKMELİ & TAM EKRAN DESTEKLİ)
     # =========================================================================
     def create_materials_tab(self):
         tab = QWidget()
-        lay = QHBoxLayout(tab)
-        lay.setContentsMargins(0, 12, 0, 0)
-        lay.setSpacing(16)
+        self.materials_main_lay = QHBoxLayout(tab)
+        self.materials_main_lay.setContentsMargins(0, 12, 0, 0)
+        self.materials_main_lay.setSpacing(16)
 
         left_box = QVBoxLayout()
         left_box.setSpacing(10)
@@ -612,49 +725,102 @@ class VaultView(QWidget):
         btn_delete_material.clicked.connect(self.delete_active_material)
         left_box.addWidget(btn_delete_material)
 
-        lay.addLayout(left_box)
+        self.materials_main_lay.addLayout(left_box)
 
-        # Viewer Stack: Görüntüleyici Ekranları Barındırır
-        self.viewer_stack = QStackedWidget()
-        self.viewer_stack.setStyleSheet("background-color: rgba(128, 128, 128, 0.1); border-radius: 8px;")
-
-        self.empty_label = QLabel("Görüntülemek için soldaki listeden bir dosya seçin.")
-        self.empty_label.setAlignment(Qt.AlignCenter)
-        self.empty_label.setStyleSheet("color: #71717a; font-size: 14px;")
-        self.viewer_stack.addWidget(self.empty_label)
-
-        self.image_scroll = QScrollArea()
-        self.image_scroll.setWidgetResizable(True)
-        self.image_scroll.setAlignment(Qt.AlignCenter)
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_scroll.setWidget(self.image_label)
-        self.viewer_stack.addWidget(self.image_scroll)
-
-        self.pdf_view = QWebEngineView()
-        self.pdf_view.settings().setAttribute(QWebEngineSettings.PluginsEnabled, True)
-        self.pdf_view.settings().setAttribute(QWebEngineSettings.PdfViewerEnabled, True)
-        self.viewer_stack.addWidget(self.pdf_view)
+        # SEKMELİ GÖRÜNTÜLEYİCİ MİMARİSİ
+        self.preview_tabs = QTabWidget()
+        self.preview_tabs.setTabsClosable(True)
+        self.preview_tabs.tabCloseRequested.connect(self.close_preview_tab)
+        self.preview_tabs.setStyleSheet("""
+            QTabWidget::pane { border: 1px solid #3f3f46; border-radius: 8px; background-color: #171412; }
+            QTabBar::tab { background: #27272a; color: #a1a1aa; padding: 10px 16px; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 4px; font-weight: bold; }
+            QTabBar::tab:selected { background: #38bdf8; color: #0c0a09; }
+            QTabBar::tab:hover:!selected { background: #3f3f46; color: #ffffff; }
+        """)
         
-        self.document_viewer = QWebEngineView()
-        self.viewer_stack.addWidget(self.document_viewer)
-
-        self.spreadsheet_editor = SpreadsheetEditorWidget(self.db, self)
-        self.viewer_stack.addWidget(self.spreadsheet_editor)
-
-        lay.addWidget(self.viewer_stack)
+        # TAM EKRAN BUTONU
+        self.btn_fullscreen = QPushButton("🔲 Tam Ekran")
+        self.btn_fullscreen.setCursor(QCursor(Qt.PointingHandCursor))
+        self.btn_fullscreen.setStyleSheet("""
+            QPushButton { background-color: #38bdf8; color: #0c0a09; font-weight: bold; padding: 4px 12px; border-radius: 4px; margin: 4px; border: none; }
+            QPushButton:hover { background-color: #0284c7; color: white; }
+        """)
+        self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)
+        self.preview_tabs.setCornerWidget(self.btn_fullscreen, Qt.TopRightCorner)
+        
+        self.materials_main_lay.addWidget(self.preview_tabs)
 
         self.refresh_course_filter()
         return tab
 
+    # =========================================================================
+    # TÜM SEKMELERİ BİRDEN TAM EKRAN YAPMA MANTIĞI
+    # =========================================================================
+    def toggle_fullscreen(self):
+        if self.preview_tabs.count() == 0:
+            QMessageBox.information(self, "Bilgi", "Tam ekran yapılacak bir dosya sekmesi açık değil.")
+            return
+
+        # Ana pencereye bağlı, çerçevesiz ve modern bir diyalog oluşturuyoruz
+        dlg = QDialog(self.main_window if hasattr(self, "main_window") and self.main_window else self)
+        dlg.setWindowTitle("Tam Ekran Dosya Görüntüleyici")
+        dlg.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        dlg.setStyleSheet("background-color: #0c0a09;")
+        
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        
+        # Tam Ekran Özel Üst Menü / Çıkış Çubuğu
+        header = QFrame()
+        header.setStyleSheet("background-color: #1c1917; border-bottom: 1px solid #292524;")
+        h_lay = QHBoxLayout(header)
+        h_lay.setContentsMargins(20, 10, 20, 10)
+        
+        lbl_title = QLabel("🔲 Tam Ekran Dosya Görüntüleyici")
+        lbl_title.setStyleSheet("color: #38bdf8; font-size: 16px; font-weight: bold;")
+        
+        btn_close = QPushButton("Küçült / Çıkış (ESC)")
+        btn_close.setCursor(QCursor(Qt.PointingHandCursor))
+        btn_close.setStyleSheet("""
+            QPushButton { background-color: #3f3f46; color: #ffffff; padding: 6px 16px; border-radius: 6px; font-weight: bold; border: none; }
+            QPushButton:hover { background-color: #ef4444; }
+        """)
+        btn_close.clicked.connect(dlg.accept)
+        
+        h_lay.addWidget(lbl_title)
+        h_lay.addStretch()
+        h_lay.addWidget(btn_close)
+        
+        lay.addWidget(header)
+        
+        # Sadece tek bir dosyayı değil, BÜTÜN sekmeleri tam ekrana ekle
+        self.btn_fullscreen.setVisible(False)
+        lay.addWidget(self.preview_tabs, stretch=1)
+        
+        dlg.showFullScreen()
+        dlg.exec()
+        
+        # Kullanıcı ESC'ye veya Çıkış'a basınca tüm sekmeler ana ekrana geri döner
+        self.btn_fullscreen.setVisible(True)
+        self.materials_main_lay.addWidget(self.preview_tabs)
+    # =========================================================================
+
+    def close_preview_tab(self, index):
+        widget = self.preview_tabs.widget(index)
+        self.preview_tabs.removeTab(index)
+        widget.deleteLater()
+
     def open_spreadsheet_editor(self):
         self.materials_list.clearSelection()
-        self.spreadsheet_editor.new_file()
-        self.viewer_stack.setCurrentIndex(4)
+        editor = SpreadsheetEditorWidget(self.db, self)
+        editor.new_file()
+        idx = self.preview_tabs.addTab(editor, "📊 Yeni Tablo")
+        self.preview_tabs.setCurrentIndex(idx)
 
     def toggle_preview(self):
         is_hidden = self.btn_toggle_preview.isChecked()
-        self.viewer_stack.setHidden(is_hidden)
+        self.preview_tabs.setHidden(is_hidden)
         self.btn_toggle_preview.setText("👁 Ön İzlemeyi Aç" if is_hidden else "👁 Ön İzlemeyi Gizle")
 
     def refresh_course_filter(self):
@@ -819,26 +985,24 @@ class VaultView(QWidget):
         if confirm == QMessageBox.Yes:
             with self.db.get_connection() as conn:
                 cur = conn.cursor()
-                
-                # GÜNCELLEME: Eğer silinen bu dosya bir kitap PDF'i ise, kitaptaki bağlantıyı kopar.
                 cur.execute("UPDATE books SET pdf_path = '' WHERE pdf_path = ?", (data["file_path"],))
-                
-                # Dosyayı materyal havuzundan (veritabanından) tamamen sil
                 cur.execute("DELETE FROM materials WHERE id = ?", (data["id"],))
                 conn.commit()
 
             play_action_sound("delete")
 
             if os.path.exists(data["file_path"]):
-                try:
-                    os.remove(data["file_path"])
-                except Exception as e:
-                    print(f"Uyarı: Yerel dosya silinemedi - {e}")
+                try: os.remove(data["file_path"])
+                except Exception: pass
 
-            self.viewer_stack.setCurrentIndex(0)
+            for i in reversed(range(self.preview_tabs.count())):
+                widget = self.preview_tabs.widget(i)
+                if widget.property("file_path") == data["file_path"]:
+                    self.preview_tabs.removeTab(i)
+                    widget.deleteLater()
+
             self.load_materials()
             
-            # GÜNCELLEME: Kitaplığı anında yenile ki oradaki 'PDF'i Aç' butonu kaybolsun
             if hasattr(self.main_window, "library_view"):
                 self.main_window.library_view.load_books()
 
@@ -846,23 +1010,44 @@ class VaultView(QWidget):
         data = item.data(Qt.UserRole)
         f_path = data["file_path"]
         f_type = data["file_type"]
+        title = data["file_name"]
 
         if not os.path.exists(f_path):
-            self.empty_label.setText("Dosya diskte bulunamadı.")
-            self.viewer_stack.setCurrentIndex(0)
+            QMessageBox.warning(self, "Hata", "Dosya diskte bulunamadı.")
             return
 
+        for i in range(self.preview_tabs.count()):
+            widget = self.preview_tabs.widget(i)
+            if widget.property("file_path") == f_path:
+                self.preview_tabs.setCurrentIndex(i)
+                return
+
         if f_type == "image":
+            scroll = QScrollArea()
+            scroll.setProperty("file_path", f_path)
+            scroll.setWidgetResizable(True)
+            scroll.setAlignment(Qt.AlignCenter)
+            label = QLabel()
+            label.setAlignment(Qt.AlignCenter)
             pixmap = QPixmap(f_path)
             if not pixmap.isNull():
-                self.image_label.setPixmap(pixmap.scaledToWidth(800, Qt.SmoothTransformation))
-                self.viewer_stack.setCurrentIndex(1)
+                label.setPixmap(pixmap.scaledToWidth(800, Qt.SmoothTransformation))
+                scroll.setWidget(label)
+                idx = self.preview_tabs.addTab(scroll, f"🖼️ {title}")
+                self.preview_tabs.setCurrentIndex(idx)
+                
         elif f_type == "pdf":
-            self.pdf_view.setUrl(QUrl.fromLocalFile(os.path.abspath(f_path)))
-            self.viewer_stack.setCurrentIndex(2)
+            viewer = TranslationWebEngineView()
+            viewer.setProperty("file_path", f_path)
+            viewer.setUrl(QUrl.fromLocalFile(os.path.abspath(f_path)))
+            idx = self.preview_tabs.addTab(viewer, f"📕 {title}")
+            self.preview_tabs.setCurrentIndex(idx)
+            
         elif f_type == "docx":
+            viewer = TranslationWebEngineView()
+            viewer.setProperty("file_path", f_path)
             if not DOCX_AVAILABLE:
-                self.document_viewer.setHtml("<h3 style='color:white;'>DOCX görüntülemek için 'python-docx' kütüphanesini kurmalısınız.<br>Terminal: pip install python-docx</h3>")
+                viewer.setHtml("<h3 style='color:white; padding: 20px;'>DOCX görüntülemek için terminalden 'pip install python-docx' kurmalısınız.</h3>")
             else:
                 try:
                     doc = docx.Document(f_path)
@@ -873,69 +1058,58 @@ class VaultView(QWidget):
                     h2 {{ color: #38bdf8; border-bottom: 1px solid #292524; padding-bottom: 10px; margin-top: 0; }}
                     </style></head><body>
                     <div class='doc-card'>
-                    <h2>{data['file_name']}</h2>
+                    <h2>{title}</h2>
                     """
                     for p in doc.paragraphs:
                         if p.text.strip():
                             html += f"<p>{p.text}</p>"
                     html += "</div></body></html>"
-                    self.document_viewer.setHtml(html)
+                    viewer.setHtml(html)
                 except Exception as e:
-                    self.document_viewer.setHtml(f"<h3 style='color:red;'>Dosya okunamadı: {e}</h3>")
-            self.viewer_stack.setCurrentIndex(3)
+                    viewer.setHtml(f"<h3 style='color:red;'>Dosya okunamadı: {e}</h3>")
+            idx = self.preview_tabs.addTab(viewer, f"📝 {title}")
+            self.preview_tabs.setCurrentIndex(idx)
+            
         elif f_type == "pptx":
+            viewer = TranslationWebEngineView()
+            viewer.setProperty("file_path", f_path)
             if not PPTX_AVAILABLE:
-                self.document_viewer.setHtml("<h3 style='color:white;'>PPTX görüntülemek için 'python-pptx' kütüphanesini kurmalısınız.<br>Terminal: pip install python-pptx</h3>")
+                viewer.setHtml("<h3 style='color:white; padding: 20px;'>PPTX görüntülemek için terminalden 'pip install python-pptx' kurmalısınız.</h3>")
             else:
                 try:
                     prs = Presentation(f_path)
-                    
-                    # Modern JS ve CSS Slayt Gösterisi Motoru
                     html = f"""
                     <html><head><style>
                     body {{ margin: 0; background: #0c0a09; color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
                     .header {{ padding: 12px 20px; background: #12100e; border-bottom: 1px solid #292524; font-weight: bold; color: #a1a1aa; font-size: 14px; text-align: center; }}
                     .slide-container {{ flex: 1; position: relative; display: flex; justify-content: center; align-items: center; padding: 20px; }}
-                    
-                    /* Slayt Kartı ve Geçiş Efekti (Fade-in / Scale) */
                     .slide {{ display: none; width: 100%; max-width: 900px; max-height: 100%; background: #1c1917; border: 1px solid #292524; border-radius: 12px; padding: 50px; box-sizing: border-box; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideAnim 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94); }}
                     .slide.active {{ display: block; }}
                     @keyframes slideAnim {{ from {{ opacity: 0; transform: scale(0.96) translateY(10px); }} to {{ opacity: 1; transform: scale(1) translateY(0); }} }}
-                    
                     .slide-title {{ color: #38bdf8; font-size: 28px; font-weight: 800; margin-top: 0; margin-bottom: 24px; border-bottom: 2px solid #292524; padding-bottom: 16px; line-height: 1.3; }}
                     ul {{ padding-left: 28px; margin-top: 0; }}
                     li {{ margin-bottom: 12px; font-size: 18px; color: #e4e4e7; line-height: 1.5; }}
-                    
-                    /* Navigasyon Paneli */
                     .controls {{ height: 70px; background: #12100e; display: flex; justify-content: center; align-items: center; gap: 24px; border-top: 1px solid #292524; }}
                     button {{ background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 10px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s; }}
                     button:hover {{ background: #38bdf8; color: #000; border-color: #38bdf8; }}
                     .indicator {{ color: #a1a1aa; font-weight: 800; font-size: 15px; min-width: 70px; text-align: center; }}
                     </style></head><body>
-                    
-                    <div class="header">📊 {data['file_name']}</div>
+                    <div class="header">📊 {title}</div>
                     <div class="slide-container">
                     """
-                    
-                    # Slayt verilerini çıkartıp HTML içine yerleştirme
                     for i, slide in enumerate(prs.slides):
                         html += f"<div class='slide'>"
-                        
                         title_shape = getattr(slide.shapes, 'title', None)
                         if title_shape and hasattr(title_shape, 'text') and title_shape.text.strip():
                             html += f"<div class='slide-title'>{title_shape.text.strip()}</div>"
-                            
                         html += "<ul>"
                         for shape in slide.shapes:
-                            if title_shape and shape == title_shape:
-                                continue
+                            if title_shape and shape == title_shape: continue
                             if hasattr(shape, "text") and shape.text.strip():
                                 for paragraph in shape.text_frame.paragraphs:
                                     text = paragraph.text.strip()
-                                    if text:
-                                        html += f"<li>{text}</li>"
+                                    if text: html += f"<li>{text}</li>"
                         html += "</ul></div>"
-                        
                     html += """
                     </div>
                     <div class="controls">
@@ -943,42 +1117,33 @@ class VaultView(QWidget):
                         <span class="indicator" id="slideNum">1 / X</span>
                         <button onclick="changeSlide(1)">Sonraki Slayt ▶</button>
                     </div>
-                    
-                    <!-- Slayt Motoru JavaScript Kodları -->
                     <script>
-                        let current = 0;
-                        const slides = document.querySelectorAll('.slide');
-                        const indicator = document.getElementById('slideNum');
-                        
+                        let current = 0; const slides = document.querySelectorAll('.slide'); const indicator = document.getElementById('slideNum');
                         function showSlide(index) {
                             if (slides.length === 0) return;
                             if (index >= slides.length) current = 0;
                             if (index < 0) current = slides.length - 1;
-                            
                             slides.forEach(s => s.classList.remove('active'));
                             slides[current].classList.add('active');
                             indicator.innerText = (current + 1) + ' / ' + slides.length;
                         }
-                        
-                        function changeSlide(dir) {
-                            current += dir;
-                            showSlide(current);
-                        }
-                        
-                        // Klavye yön tuşları ile geçiş desteği
-                        document.addEventListener('keydown', function(event) {
-                            if (event.key === 'ArrowRight' || event.key === 'Space') { changeSlide(1); }
-                            if (event.key === 'ArrowLeft') { changeSlide(-1); }
+                        function changeSlide(dir) { current += dir; showSlide(current); }
+                        document.addEventListener('keydown', function(e) {
+                            if (e.key === 'ArrowRight' || e.key === 'Space') { changeSlide(1); }
+                            if (e.key === 'ArrowLeft') { changeSlide(-1); }
                         });
-                        
                         showSlide(current);
-                    </script>
-                    </body></html>
+                    </script></body></html>
                     """
-                    self.document_viewer.setHtml(html)
+                    viewer.setHtml(html)
                 except Exception as e:
-                    self.document_viewer.setHtml(f"<h3 style='color:red;'>Sunum okunamadı: {e}</h3>")
-            self.viewer_stack.setCurrentIndex(3)
+                    viewer.setHtml(f"<h3 style='color:red;'>Sunum okunamadı: {e}</h3>")
+            idx = self.preview_tabs.addTab(viewer, f"📊 {title}")
+            self.preview_tabs.setCurrentIndex(idx)
+            
         elif f_type == "excel":
-            self.spreadsheet_editor.load_file(data["id"], f_path, data["file_name"])
-            self.viewer_stack.setCurrentIndex(4)
+            editor = SpreadsheetEditorWidget(self.db, self)
+            editor.setProperty("file_path", f_path)
+            editor.load_file(data["id"], f_path, title)
+            idx = self.preview_tabs.addTab(editor, f"📗 {title}")
+            self.preview_tabs.setCurrentIndex(idx)
