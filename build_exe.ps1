@@ -1,11 +1,14 @@
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Script çalıştırma yetkisi kısıtlamalarını mevcut kullanıcı için otomatik olarak kaldır
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser -Force
+
+$projectRoot = Split-Path -Parent$MyInvocation.MyCommand.Path
 Set-Location -LiteralPath $projectRoot
 
-$outputRoot = Join-Path $projectRoot 'Student Os'
-$workRoot = Join-Path $outputRoot 'build'
+$outputRoot = Join-Path$projectRoot 'Student Os'
+$workRoot = Join-Path$outputRoot 'build'
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " Student Life OS - EXE Build" -ForegroundColor Cyan
@@ -36,8 +39,7 @@ foreach ($file in @('app.py', 'StudentLifeOS.spec')) {
 Write-Host "`n>>> Eski build temizleniyor..." -ForegroundColor Cyan
 
 $runningProcess = Get-Process -Name 'StudentLifeOS' -ErrorAction SilentlyContinue
-if ($runningProcess) {
-    $runningProcess | Stop-Process -Force -ErrorAction SilentlyContinue
+if ($runningProcess) {$runningProcess | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
 }
 
@@ -45,7 +47,7 @@ if (Test-Path -LiteralPath $outputRoot) {
     Remove-Item -LiteralPath $outputRoot -Recurse -Force
 }
 
-$distRoot = $outputRoot
+$distRoot =$outputRoot
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 
 Write-Host "`n>>> PyInstaller derlemesi basliyor..." -ForegroundColor Yellow
@@ -110,5 +112,5 @@ Write-Host ""
 
 $answer = Read-Host "Uygulamayi simdi baslatmak ister misin? (E/H)"
 if ($answer -match '^[EeYy]') {
-    Start-Process -FilePath $finalExe -WorkingDirectory $finalRoot
+    Start-Process -FilePath $finalExe -WorkingDirectory$finalRoot
 }
